@@ -1,0 +1,12 @@
+{
+    "require": {
+        "abraham/twitteroauth": "^3.1"
+    },
+    "autoload": {
+		"psr-4": {
+			"Antsstyle\\NFTArtistBlocker\\Core\\": "src/core/",
+			"Antsstyle\\NFTArtistBlocker\\Credentials\\": "src/credentials/",
+			"Antsstyle\\NFTArtistBlocker\\Cronjobs\\": "src/cronjobs/"
+		}
+	}
+}

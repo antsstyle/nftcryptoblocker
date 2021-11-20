@@ -1,0 +1,1 @@
+To use this in production, rename the "testcredentials" folder to "credentials", and fill in the required credentials in APIKeys.php and DB.php.

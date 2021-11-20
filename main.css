@@ -1,0 +1,78 @@
+body {
+    background-color: #202020;
+    font-family: verdana;
+    color: #c0c0c0;
+    font-size: 14px;
+    max-width: 800px;
+}
+
+div.start {
+    
+}
+
+div.mid {
+    
+}
+
+div.end {
+    
+}
+
+div.formsection {
+    border-style: solid;
+    border-color: #0000cc;
+    margin-left: 50px;
+    max-width: 250px;
+}
+
+h1 {
+    color: #c0c0c0;
+    text-align: center;
+}
+
+p {
+    color: #c0c0c0;
+    font-size: 14px;
+}
+
+form {
+    color: #c0c0c0;
+    font-size: 14px;
+}
+
+label {
+    font-size: 14px;
+}
+
+ol {
+    list-style: none; /* Remove default bullets */
+    font-family: verdana;
+    font-size: 12px;
+}
+
+ol li::before {
+    content: "\2022";
+    color: #c0c0c0;
+    display: inline-block;
+    width: 1em;
+    margin-left: -1em;
+}
+
+a:link {
+    color: lightblue;
+}
+
+a:visited {
+    color: violet;
+}
+
+a:hover {
+    color: lightgreen;
+}
+
+input[type=submit] {
+  padding: 10px 24px;
+  margin: 4px 2px;
+  font-weight: bold;
+  cursor: pointer;
+}

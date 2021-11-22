@@ -6,4 +6,4 @@ cd "$(dirname "$0")"
 
 cd "../"
 
-php cronjobs/CheckMentions.php
+php cronjobs/CheckMentionTimelines.php

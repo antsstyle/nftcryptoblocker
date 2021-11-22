@@ -12,6 +12,44 @@ class CoreDB {
 
     public static $databaseConnection;
 
+    public static function getFollowerCacheForUser($userTwitterID) {
+        $selectQuery = "SELECT recentfollowerid FROM userfollowerscache WHERE usertwitterid=?";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute([$userTwitterID]);
+        if (!$success) {
+            error_log("Could not retrieve user follower cache, returning.");
+            return false;
+        }
+        $followerIDs = [];
+        while ($followerID = $selectStmt->fetchColumn()) {
+            $followerIDs[] = $followerID;
+        }
+        return $followerIDs;
+    }
+
+    public static function updateFollowerCacheForUser($userTwitterID, $followerIDs) {
+        $deleteQuery = "DELETE FROM userfollowerscache WHERE usertwitterid=?";
+        $deleteStmt = CoreDB::$databaseConnection->prepare($deleteQuery);
+        $success = $deleteStmt->execute([$userTwitterID]);
+        if (!$success) {
+            error_log("Could not delete user follower cache, returning.");
+            return;
+        }
+        $insertQuery = "INSERT INTO userfollowerscache (usertwitterid,recentfollowerid) VALUES ";
+        foreach ($followerIDs as $followerID) {
+            $insertQuery .= "(?,?),";
+            $insertParams[] = $userTwitterID;
+            $insertParams[] = $followerID;
+        }
+        $insertQuery = substr($insertQuery, 0, -1);
+        $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
+        $success = $insertStmt->execute($insertParams);
+        if (!$success) {
+            error_log("Could not insert user follower cache! User twitter ID: $userTwitterID");
+            return;
+        }
+    }
+
     public static function checkCentralisedBlockListForAllUsers() {
         $selectQuery = "SELECT * FROM users INNER JOIN usercentralisedblocklistrecords "
                 . "ON users.twitterid=usercentralisedblocklistrecords.usertwitterid WHERE "
@@ -263,7 +301,7 @@ class CoreDB {
     }
 
     public static function updateTwitterEndpointLogs($endpoint, $callCount) {
-        $date = strtotime("Y-m-d");
+        $date = date("Y-m-d");
         $insertQuery = "INSERT INTO twitterendpointlogs (date,endpoint,callcount) VALUES (?,?,?) "
                 . "ON DUPLICATE KEY UPDATE callcount=callcount+?";
         $insertStmt = self::$databaseConnection->prepare($insertQuery);
@@ -337,6 +375,7 @@ class CoreDB {
 
     public static function markListForUser($userTwitterID, $blockListName, $operation) {
         $operation = strtolower(filter_var($operation, FILTER_SANITIZE_STRING));
+        $operation = ucfirst($operation);
         $userTwitterID = filter_var($userTwitterID, FILTER_SANITIZE_NUMBER_INT);
         $doneAlready = self::checkUserOperation($userTwitterID, $blockListName, $operation);
         if ($doneAlready) {
@@ -348,7 +387,7 @@ class CoreDB {
                 . "(SELECT id FROM blocklists WHERE name=?) AND blockusertwitterid NOT IN (SELECT objectusertwitterid FROM "
                 . "userinitialblockrecords WHERE subjectusertwitterid=? AND operation='$operation') ON DUPLICATE KEY UPDATE operation='$operation'";
         $success1 = self::$databaseConnection->prepare($insertQuery)
-                ->execute([$blockListName]);
+                ->execute([$blockListName, $userTwitterID]);
         if (!$success1) {
             return false;
         }

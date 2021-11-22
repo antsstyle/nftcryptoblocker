@@ -8,6 +8,6 @@ $dir = getcwd();
 
 require $dir . '/vendor/autoload.php';
 
-use Antsstyle\NFTArtistBlocker\Core\TwitterMentions;
+use Antsstyle\NFTArtistBlocker\Core\TwitterTimelines;
 
-TwitterMentions::checkMentionsForAllUsers();
+TwitterTimelines::checkMentionsTimelineForAllUsers();

@@ -34,7 +34,7 @@ $blockablePhrasesPage =  Config::HOMEPAGE_URL . "blockablephrases";
     <title>
         NFT Artist Blocker
     </title>
-    <body onload="getUserInformation(<?php echo $_SESSION['usertwitterid']; ?>)">
+    <body onload="getUserInformation('<?php echo $_SESSION['usertwitterid']; ?>')">
         <div class="start">
             Twitter authentication successful. Choose the settings you want below and press the 'Save Settings' button at the bottom of the page
             (if you already have saved settings, they will be preselected).<br/>

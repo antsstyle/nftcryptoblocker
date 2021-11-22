@@ -6,4 +6,4 @@ cd "$(dirname "$0")"
 
 cd "../"
 
-php cronjobs/CheckNFTFollowers.php
+php cronjobs/CheckHomeTimelines.php

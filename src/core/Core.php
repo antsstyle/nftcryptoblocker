@@ -37,34 +37,106 @@ class Core {
         return StatusCodes::QUERY_OK;
     }
 
-    // Checks if we need to perform block or mute operations, returns an array of exclusions.
-    public static function checkFriendshipsForUser($userRow, $blockIDs, $userOperationsMap) {
+    public static function checkWhitelistForUser($userRow, $potentialIDs) {
+        if ($userRow['whitelistfollowings'] != "Y") {
+            return [];
+        }
+        if (!is_array($potentialIDs)) {
+            error_log("Invalid input supplied to checkWhitelistForUser - potentialIDs was not an array.");
+            return null;
+        }
+        if (count($potentialIDs) == 0) {
+            return [];
+        }
         $accessToken = $userRow['accesstoken'];
         $accessTokenSecret = $userRow['accesstokensecret'];
         $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
                 $accessToken, $accessTokenSecret);
         $connection->setRetries(1, 1);
-        $friendships = $connection->get("friendships/lookup", ['user_id' => $blockIDs]);
-        CoreDB::updateTwitterEndpointLogs("friendships/lookup", 1);
-        $statusCode = Core::checkResponseHeadersForErrors($connection);
-        if ($statusCode != StatusCodes::QUERY_OK) {
-            return null;
+        $totalCount = count($potentialIDs);
+        $paramStrings = [];
+        for ($i = 0; $i < $totalCount; $i += 100) {
+            $separatedArray = array_slice($potentialIDs, $i, 100);
+            if (count($separatedArray) > 0) {
+                $paramString = "";
+                foreach ($separatedArray as $entry) {
+                    $paramString .= $entry . ",";
+                }
+                $paramString = substr($paramString, 0, -1);
+                $paramStrings[] = $paramString;
+            }
         }
         $returnArray = [];
-        foreach ($friendships as $friendship) {
-            $connections = $friendship->connections;
-            foreach ($connections as $connection) {
-                if (($connection == "following" || $connection == "following_requested") && $userRow['whitelistfollowings'] == "Y") {
-                    $returnArray[$friendship->id] = $connection;
-                } else if (array_key_exists($friendship->id, $userOperationsMap) &&
-                        $userOperationsMap[$friendship->id] == "Block" && $connection == "blocking") {
-                    $returnArray[$friendship->id] = $connection;
-                } else if (array_key_exists($friendship->id, $userOperationsMap) &&
-                        $userOperationsMap[$friendship->id] == "Mute" && $connection == "muting") {
-                    $returnArray[$friendship->id] = $connection;
+        foreach ($paramStrings as $paramString) {
+            $friendships = $connection->get("friendships/lookup", ['user_id' => $paramString]);
+            CoreDB::updateTwitterEndpointLogs("friendships/lookup", 1);
+            $statusCode = Core::checkResponseHeadersForErrors($connection);
+            if ($statusCode != StatusCodes::QUERY_OK) {
+                return null;
+            }
+            foreach ($friendships as $friendship) {
+                $connections = $friendship->connections;
+                foreach ($connections as $connection) {
+                    if (($connection == "following" || $connection == "following_requested") && $userRow['whitelistfollowings'] == "Y") {
+                        $returnArray[$friendship->id] = $connection;
+                    }
                 }
             }
         }
+        return $returnArray;
+    }
+
+    // Checks if we need to perform block or mute operations, returns an array of exclusions.
+    public static function checkFriendshipsForUser($userRow, $blockIDs, $userOperationsMap) {
+        if (!is_array($blockIDs)) {
+            error_log("Invalid input supplied to checkFriendshipsForUser - blockIDs was not an array.");
+            return null;
+        }
+        if (count($blockIDs) == 0) {
+            return [];
+        }
+        $accessToken = $userRow['accesstoken'];
+        $accessTokenSecret = $userRow['accesstokensecret'];
+        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
+                $accessToken, $accessTokenSecret);
+        $connection->setRetries(1, 1);
+        $totalCount = count($blockIDs);
+        $paramStrings = [];
+        for ($i = 0; $i < $totalCount; $i += 100) {
+            $separatedArray = array_slice($blockIDs, $i, 100);
+            if (count($separatedArray) > 0) {
+                $paramString = "";
+                foreach ($separatedArray as $entry) {
+                    $paramString .= $entry . ",";
+                }
+                $paramString = substr($paramString, 0, -1);
+                $paramStrings[] = $paramString;
+            }
+        }
+        $returnArray = [];
+        foreach ($paramStrings as $paramString) {
+            $friendships = $connection->get("friendships/lookup", ['user_id' => $blockIDs]);
+            CoreDB::updateTwitterEndpointLogs("friendships/lookup", 1);
+            $statusCode = Core::checkResponseHeadersForErrors($connection);
+            if ($statusCode != StatusCodes::QUERY_OK) {
+                return null;
+            }
+            foreach ($friendships as $friendship) {
+                $connections = $friendship->connections;
+                foreach ($connections as $connection) {
+                    if (($connection == "following" || $connection == "following_requested") && $userRow['whitelistfollowings'] == "Y") {
+                        $returnArray[$friendship->id] = $connection;
+                    } else if (array_key_exists($friendship->id, $userOperationsMap) &&
+                            $userOperationsMap[$friendship->id] == "Block" && $connection == "blocking") {
+                        $returnArray[$friendship->id] = $connection;
+                    } else if (array_key_exists($friendship->id, $userOperationsMap) &&
+                            $userOperationsMap[$friendship->id] == "Mute" && $connection == "muting") {
+                        $returnArray[$friendship->id] = $connection;
+                    }
+                }
+            }
+        }
+
         return $returnArray;
     }
 
@@ -112,7 +184,57 @@ class Core {
         CoreDB::$databaseConnection->commit();
     }
 
-    public static function checkUserFilters($mention, $userInfo, $phrases, $urls, $regexes) {
+    public static function CheckUserFiltersHomeTimeline($tweet, $userInfo, $phrases, $urls, $regexes) {
+        $tweetUserURLs = $tweet->user->entities->url;
+        if (is_array($tweetUserURLs) && count($tweetUserURLs) > 0) {
+            $tweetUserURL = $tweetUserURLs[0]->expanded_url;
+            $tweetUserURL = filter_var($tweetUserURL, FILTER_VALIDATE_URL);
+            if ($tweetUserURL) {
+                $tweetURLHost = strtolower(parse_url($tweetUserURL, PHP_URL_HOST));
+            }
+        }
+        $tweetUserDescription = $tweet->user->description;
+        $tweetText = $tweet->full_text;
+        if (!$tweetText) {
+            $tweetText = $tweet->text;
+        }
+        $tweetText = strtolower($tweetText);
+        if ($userInfo['matchingphraseoperation'] == "Block" || $userInfo['matchingphraseoperation'] == "Mute") {
+            foreach ($phrases as $phrase) {
+                $lowerCasePhrase = strtolower($phrase['phrase']);
+                if ((strpos((String) $tweetText, (String) $lowerCasePhrase) !== false) ||
+                        (strpos((String) $tweetUserDescription, (String) $lowerCasePhrase) !== false)) {
+                    return array("operation" => $userInfo['matchingphraseoperation'], "filtertype" => "matchingphrase",
+                        "filtercontent" => $phrase['phrase']);
+                }
+            }
+        }
+        if ($userInfo['nftprofilepictureoperation'] == "Block" || $userInfo['nftprofilepictureoperation'] == "Mute") {
+            if ($tweet->user->ext_has_nft_avatar) {
+                return array("operation" => $userInfo['nftprofilepictureoperation'], "filtertype" => "nftprofilepictures", "filtercontent" => null);
+            }
+        }
+        if ($userInfo['profileurlsoperation'] == "Block" || $userInfo['profileurlsoperation'] == "Mute") {
+            foreach ($urls as $url) {
+                $urlHost = strtolower(parse_url($url['url'], PHP_URL_HOST));
+                if (isset($tweetURLHost) && (strpos((String) $urlHost, (String) $tweetURLHost) !== false)) {
+                    return array("operation" => $userInfo['profileurlsoperation'], "filtertype" => "profileurls", "filtercontent" => $url['url']);
+                }
+            }
+        }
+        if ($userInfo['cryptousernamesoperation'] == "Block" || $userInfo['cryptousernamesoperation'] == "Mute") {
+            foreach ($regexes as $regex) {
+                $userName = strtolower($tweet->user->name);
+                if (preg_match($regex['regex'], $userName)) {
+                    return array("operation" => $userInfo['cryptousernamesoperation'], "filtertype" => "cryptousernames",
+                        "filtercontent" => $regex['regex']);
+                }
+            }
+        }
+        return false;
+    }
+
+    public static function checkUserFiltersMentionTimeline($mention, $userInfo, $phrases, $urls, $regexes) {
         $mentionUserURLs = $mention->user->entities->url;
         if (is_array($mentionUserURLs) && count($mentionUserURLs) > 0) {
             $mentionUserURL = $mentionUserURLs[0]->expanded_url;
@@ -130,7 +252,8 @@ class Core {
         if ($userInfo['matchingphraseoperation'] == "Block" || $userInfo['matchingphraseoperation'] == "Mute") {
             foreach ($phrases as $phrase) {
                 $lowerCasePhrase = strtolower($phrase['phrase']);
-                if ((strpos((String) $mentionTweetText, (String) $lowerCasePhrase) !== -1) || (strpos((String) $mentionUserDescription, (String) $lowerCasePhrase) !== -1)) {
+                if ((strpos((String) $mentionTweetText, (String) $lowerCasePhrase) !== false) ||
+                        (strpos((String) $mentionUserDescription, (String) $lowerCasePhrase) !== false)) {
                     return array("operation" => $userInfo['matchingphraseoperation'], "filtertype" => "matchingphrase",
                         "filtercontent" => $phrase['phrase']);
                 }
@@ -144,7 +267,7 @@ class Core {
         if ($userInfo['profileurlsoperation'] == "Block" || $userInfo['profileurlsoperation'] == "Mute") {
             foreach ($urls as $url) {
                 $urlHost = strtolower(parse_url($url['url'], PHP_URL_HOST));
-                if (isset($mentionURLHost) && (strpos((String) $urlHost, (String) $mentionURLHost) !== -1)) {
+                if (isset($mentionURLHost) && (strpos((String) $urlHost, (String) $mentionURLHost) !== false)) {
                     return array("operation" => $userInfo['profileurlsoperation'], "filtertype" => "profileurls", "filtercontent" => $url['url']);
                 }
             }
@@ -195,10 +318,10 @@ class Core {
         $deleteParams = [];
         $centralBlockListInsertParams = [];
         $operationRows = $selectStmt->fetchAll();
-        $friendshipIDsToCheck = "";
+        $friendshipIDsToCheck = [];
         $userOperationsMap = [];
         foreach ($operationRows as $operationRow) {
-            $friendshipIDsToCheck .= $operationRow['objectusertwitterid'] . ",";
+            $friendshipIDsToCheck[] = $operationRow['objectusertwitterid'];
             $userOperationsMap[$operationRow['objectusertwitterid']] = $operationRow['operation'];
         }
         $friendshipIDsToCheck = substr($friendshipIDsToCheck, 0, -1);
@@ -224,9 +347,9 @@ class Core {
                     error_log("Unknown operation value - cannot perform entry to be processed.");
                     continue;
                 }
-                $params = ['user_id' => $row['objectusertwitterid']];
+                $params['user_id'] = $row['objectusertwitterid'];
                 if ($operation == 'Block' || $operation == 'Unblock') {
-                    $params[] = ['skip_status' => 'true'];
+                    $params['skip_status'] = 'true';
                 }
                 $response = $connection->post($endpoint, $params);
                 CoreDB::updateTwitterEndpointLogs($endpoint, 1);

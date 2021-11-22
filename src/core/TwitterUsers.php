@@ -35,9 +35,9 @@ class TwitterUsers {
         $params['user.fields'] = "entities,description,name,profile_image_url,url,username";
         $accessToken = $userRow['accesstoken'];
         $accessTokenSecret = $userRow['accesstokensecret'];
-        $lastFollowersCursor = $userRow['lastfollowerscursor'];
-        if ($lastFollowersCursor !== null && $userRow['followersendreached'] == "N") {
-            $params['pagination_token'] = $lastFollowersCursor;
+        $followersPaginationToken = $userRow['followerspaginationtoken'];
+        if ($followersPaginationToken != null && $userRow['followersendreached'] == "N") {
+            $params['pagination_token'] = $followersPaginationToken;
         }
         $insertParams = [];
         $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
@@ -47,7 +47,11 @@ class TwitterUsers {
         $returnedPages = 0;
         $highestCheckedUserID = 0;
         $noMorePages = false;
+        if ($userRow['followersendreached'] == "Y") {
+            $followerCache = CoreDB::getFollowerCacheForUser($userRow['usertwitterid']);
+        }
         // Max of 15 pages due to both rate limits, and to avoid excessively long running times for cronjobs
+        $returnedFollowerIDs = [];
         while ($returnedPages < 15) {
             $query = "users/" . $userRow['usertwitterid'] . "/followers";
             $response = $connection->get($query, $params);
@@ -58,11 +62,20 @@ class TwitterUsers {
             }
             $returnedPages++;
             $users = $response->data;
+            if (count($users) == 0) {
+                $noMorePages = true;
+                break;
+            }
+
             foreach ($users as $objectUser) {
-                if ($userRow['followersendreached'] == "Y" && $userRow['highestfolloweridchecked'] >= $objectUser->id) {
+                if ($userRow['followersendreached'] == "Y") {
                     break;
                 }
-                $highestCheckedUserID = max($highestCheckedUserID, $objectUser->id);
+
+                if (count($returnedFollowerIDs) < 25) {
+                    $returnedFollowerIDs[] = $objectUser->id;
+                }
+
                 // check if the tweet is one we want to examine
                 // check description, profile picture: add block to entries to process if match found
                 $filtersMatched = self::checkNFTFilters($userRow, $objectUser, $phrases, $urls, $regexes);
@@ -86,35 +99,48 @@ class TwitterUsers {
                 }
             }
             $meta = $response->meta;
-            if (!isset($meta->next_token)) {
+            if (!isset($meta->next_token) && $userRow['followersendreached'] == "N") {
                 $noMorePages = true;
                 break;
+            } else if (!isset($meta->next_token)) {
+                break;
             }
+
             $params['pagination_token'] = $meta->next_token;
+
             error_log("Next cursor: " . $meta->next_token);
-            // UNRESOLVED
-            /* if ($userRow['followersendreached'] == "Y" && $response->meta->next_token < $lastFollowersCursor) {
-              break;
-              } */
+            if ($userRow['followersendreached'] == "Y") {
+                if ($followerCache === false) {
+                    $userTwitterID = $userRow['usertwitterid'];
+                    error_log("Follower cache for user ID $userTwitterID could not be retrieved!");
+                    break;
+                }
+                foreach ($returnedFollowerIDs as $returnedFollowerID) {
+                    if (in_array($returnedFollowerID, $followerCache)) {
+                        $encounteredCache = true;
+                        break;
+                    }
+                }
+                if ($encounteredCache) {
+                    break;
+                }
+            }
         }
 
         if ($noMorePages) {
             if (!isset($params['pagination_token'])) {
                 $params['pagination_token'] = null;
             }
-            $updateQuery = "UPDATE users SET lastfollowerscursor=?, followersendreached=? WHERE twitterid=?";
+            $updateQuery = "UPDATE users SET followerspaginationtoken=?, followersendreached=? WHERE twitterid=?";
             $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
             $updateStmt->execute([$params['pagination_token'], "Y", $userRow['usertwitterid']]);
-        } else if ($userRow['followersendreached'] == "Y") {
-            $updateQuery = "UPDATE users SET highestfolloweridchecked=? WHERE twitterid=?";
-            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
-            $updateStmt->execute([$highestCheckedUserID, $userRow['usertwitterid']]);
         } else {
-            $updateQuery = "UPDATE users SET lastfollowerscursor=? WHERE twitterid=?";
+            $updateQuery = "UPDATE users SET followerspaginationtoken=? WHERE twitterid=?";
             $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
             $updateStmt->execute([$params['pagination_token'], $userRow['usertwitterid']]);
         }
 
+        CoreDB::updateFollowerCacheForUser($userRow['usertwitterid'], $returnedFollowerIDs);
 
         $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
                 . "matchedfiltertype,matchedfiltercontent,addtocentraldb) VALUES (?,?,?,?,?,?)";
@@ -153,7 +179,7 @@ class TwitterUsers {
         if ($subjectUserInfo['profileurlsoperation'] == "Block" || $subjectUserInfo['profileurlsoperation'] == "Mute") {
             foreach ($urls as $url) {
                 $urlHost = strtolower(parse_url($url['url'], PHP_URL_HOST));
-                if (isset($userURLHost) && (strpos((String) $urlHost, (String) $userURLHost) !== -1)) {
+                if (isset($userURLHost) && (strpos((String) $urlHost, (String) $userURLHost) !== false)) {
                     return array("operation" => $subjectUserInfo['profileurlsoperation'], "filtertype" => "profileurls", "filtercontent" => $url['url']);
                 }
             }

@@ -353,9 +353,17 @@ class Core {
                 $response = $connection->post($endpoint, $params);
                 CoreDB::updateTwitterEndpointLogs($endpoint, 1);
                 $statusCode = Core::checkResponseHeadersForErrors($connection);
-                if ($statusCode != StatusCodes::QUERY_OK) {
+                if ($statusCode !== StatusCodes::QUERY_OK) {
                     $objectUserTwitterID = $row['objectusertwitterid'];
-                    error_log("Unable to perform operation $operation on user ID $objectUserTwitterID on behalf of user ID $userTwitterID");
+                    if ($statusCode === StatusCodes::USER_NOT_FOUND) {
+                        error_log("User with ID $objectUserTwitterID not found - cannot process entry, deleting.");
+                        $deleteParams[] = $row['id'];
+                    } else if ($statusCode === StatusCodes::USER_ALREADY_UNMUTED) {
+                        error_log("User with ID $objectUserTwitterID is already unmuted, deleting entry.");
+                        $deleteParams[] = $row['id'];
+                    } else {
+                        error_log("Unable to perform operation $operation on user ID $objectUserTwitterID on behalf of user ID $userTwitterID");
+                    }
                     continue;
                 }
                 if (is_object($response) && isset($response->id) && ($response->id == $row['objectusertwitterid'])) {

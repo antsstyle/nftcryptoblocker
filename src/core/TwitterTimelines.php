@@ -69,7 +69,7 @@ class TwitterTimelines {
                     if ($tweetID > $highestSinceID) {
                         $highestSinceID = $tweetID;
                     }
-                    if (($lowestMaxID == null) || ($tweetID < $lowestMaxID)) {
+                    if (is_null($lowestMaxID) || ($tweetID < $lowestMaxID)) {
                         $lowestMaxID = $tweetID - 1;
                     }
                     continue;
@@ -95,7 +95,7 @@ class TwitterTimelines {
                 if ($tweetID > $highestSinceID) {
                     $highestSinceID = $tweetID;
                 }
-                if (($lowestMaxID == null) || ($tweetID < $lowestMaxID)) {
+                if (is_null($lowestMaxID) || ($tweetID < $lowestMaxID)) {
                     $lowestMaxID = $tweetID - 1;
                 }
             }

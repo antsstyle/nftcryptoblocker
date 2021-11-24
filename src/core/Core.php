@@ -93,6 +93,7 @@ class Core {
             return null;
         }
         if (count($blockIDs) == 0) {
+            error_log("Empty block IDs list!");
             return [];
         }
         $accessToken = $userRow['accesstoken'];
@@ -115,7 +116,7 @@ class Core {
         }
         $returnArray = [];
         foreach ($paramStrings as $paramString) {
-            $friendships = $connection->get("friendships/lookup", ['user_id' => $blockIDs]);
+            $friendships = $connection->get("friendships/lookup", ['user_id' => $paramString]);
             CoreDB::updateTwitterEndpointLogs("friendships/lookup", 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection);
             if ($statusCode != StatusCodes::QUERY_OK) {
@@ -136,7 +137,6 @@ class Core {
                 }
             }
         }
-
         return $returnArray;
     }
 
@@ -324,9 +324,8 @@ class Core {
             $friendshipIDsToCheck[] = $operationRow['objectusertwitterid'];
             $userOperationsMap[$operationRow['objectusertwitterid']] = $operationRow['operation'];
         }
-        $friendshipIDsToCheck = substr($friendshipIDsToCheck, 0, -1);
         $exclusionList = Core::checkFriendshipsForUser($userRow, $friendshipIDsToCheck, $userOperationsMap);
-        if ($exclusionList == null) {
+        if (is_null($exclusionList)) {
             error_log("Unable to process entries for user ID $userTwitterID - could not retrieve exclusion list.");
             return;
         }

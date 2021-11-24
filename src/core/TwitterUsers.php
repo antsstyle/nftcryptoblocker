@@ -2,6 +2,7 @@
 
 namespace Antsstyle\NFTArtistBlocker\Core;
 
+use Antsstyle\NFTArtistBlocker\Core\Config;
 use Antsstyle\NFTArtistBlocker\Core\StatusCodes;
 use Antsstyle\NFTArtistBlocker\Credentials\APIKeys;
 use Antsstyle\NFTArtistBlocker\Core\CoreDB;
@@ -10,10 +11,25 @@ use Abraham\TwitterOAuth\TwitterOAuth;
 class TwitterUsers {
 
     public static function checkNFTFollowersForAllUsers() {
-        $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid"
-                . " WHERE nftfollowersoperation=? OR nftfollowersoperation=?";
+        $selectQuery = "SELECT value FROM centralconfiguration WHERE name=?";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute(["Block", "Mute"]);
+        $success = $selectStmt->execute([Config::FOLLOWER_CHECK_TIME_INTERVAL_SECONDS]);
+        if (!$success) {
+            error_log("Could not get users to check NFT followers for, returning.");
+            return;
+        }
+        $timeIntervalSeconds = $selectStmt->fetchColumn();
+        if (!$timeIntervalSeconds) {
+            // Default to 3600 seconds, i.e. 1 hour
+            $timeIntervalSeconds = 3600;
+        }
+        $timeIntervalSecondsString = "-" . $timeIntervalSeconds . " seconds";
+        $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid"
+                . " WHERE (nftfollowersoperation=? OR nftfollowersoperation=?) "
+                . "AND (followersendreached=? OR followerslastcheckedtime <= ?)";
+        $dateThreshold = date("Y-m-d H:i:s", strtotime($timeIntervalSecondsString));
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute(["Block", "Mute", "N", $dateThreshold]);
         if (!$success) {
             error_log("Could not get users to check NFT followers for, returning.");
             return;
@@ -32,7 +48,7 @@ class TwitterUsers {
 
     public static function checkNFTFollowersForUser($userRow, $phrases, $urls, $regexes) {
         $params['max_results'] = 1000;
-        $params['user.fields'] = "entities,description,name,profile_image_url,url,username";
+        $params['user.fields'] = "entities,description,name,profile_image_url,url,username,id";
         $accessToken = $userRow['accesstoken'];
         $accessTokenSecret = $userRow['accesstokensecret'];
         $followersPaginationToken = $userRow['followerspaginationtoken'];
@@ -68,11 +84,8 @@ class TwitterUsers {
             }
 
             foreach ($users as $objectUser) {
-                if ($userRow['followersendreached'] == "Y") {
-                    break;
-                }
-
                 if (count($returnedFollowerIDs) < 25) {
+                    $userID = $objectUser->id;
                     $returnedFollowerIDs[] = $objectUser->id;
                 }
 
@@ -108,7 +121,6 @@ class TwitterUsers {
 
             $params['pagination_token'] = $meta->next_token;
 
-            error_log("Next cursor: " . $meta->next_token);
             if ($userRow['followersendreached'] == "Y") {
                 if ($followerCache === false) {
                     $userTwitterID = $userRow['usertwitterid'];
@@ -127,20 +139,27 @@ class TwitterUsers {
             }
         }
 
+        $currentTimeString = date("Y-m-d H:i:s");
+
         if ($noMorePages) {
             if (!isset($params['pagination_token'])) {
                 $params['pagination_token'] = null;
             }
-            $updateQuery = "UPDATE users SET followerspaginationtoken=?, followersendreached=? WHERE twitterid=?";
+            $updateQuery = "UPDATE users SET followerspaginationtoken=?, followersendreached=?, "
+                    . "followerslastcheckedtime=? WHERE twitterid=?";
             $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
-            $updateStmt->execute([$params['pagination_token'], "Y", $userRow['usertwitterid']]);
+            $updateStmt->execute([$params['pagination_token'], "Y", $currentTimeString, $userRow['usertwitterid']]);
         } else {
-            $updateQuery = "UPDATE users SET followerspaginationtoken=? WHERE twitterid=?";
+            $updateQuery = "UPDATE users SET followerspaginationtoken=?, "
+                    . "followerslastcheckedtime=? WHERE twitterid=?";
             $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
-            $updateStmt->execute([$params['pagination_token'], $userRow['usertwitterid']]);
+            $updateStmt->execute([$params['pagination_token'], $currentTimeString, $userRow['usertwitterid']]);
         }
 
-        CoreDB::updateFollowerCacheForUser($userRow['usertwitterid'], $returnedFollowerIDs);
+        if (count($returnedFollowerIDs) == 25) {
+            CoreDB::updateFollowerCacheForUser($userRow['usertwitterid'], $returnedFollowerIDs);
+        }
+
 
         $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
                 . "matchedfiltertype,matchedfiltercontent,addtocentraldb) VALUES (?,?,?,?,?,?)";
@@ -153,19 +172,48 @@ class TwitterUsers {
     }
 
     public static function checkNFTFilters($subjectUserInfo, $objectUser, $phrases, $urls, $regexes) {
-        $userURLs = $objectUser->entities->url;
-        if (is_array($userURLs) && count($userURLs) > 0) {
-            $userURL = $userURLs[0]->expanded_url;
-            $userURL = filter_var($userURL, FILTER_VALIDATE_URL);
-            if ($userURL) {
-                $userURLHost = strtolower(parse_url($userURL, PHP_URL_HOST));
+        if (isset($objectUser->entities->url)) {
+            $userURLs = $objectUser->entities->url;
+            if (is_array($userURLs) && count($userURLs) > 0) {
+                $userURL = $userURLs[0]->expanded_url;
+                $userURL = filter_var($userURL, FILTER_VALIDATE_URL);
+                if ($userURL) {
+                    $userURLHost = strtolower(parse_url($userURL, PHP_URL_HOST));
+                }
             }
         }
         $userDescription = $objectUser->description;
         if ($subjectUserInfo['matchingphraseoperation'] == "Block" || $subjectUserInfo['matchingphraseoperation'] == "Mute") {
             foreach ($phrases as $phrase) {
                 $lowerCasePhrase = strtolower($phrase['phrase']);
-                if (strpos((String) $userDescription, (String) $lowerCasePhrase) !== false) {
+                // Check entities instead of text for hashtags and cashtags
+                if (strpos($lowerCasePhrase, "#") === 0) {
+                    if (isset($objectUser->entities->description->hashtags)) {
+                        $hashtagObjects = $objectUser->entities->description->hashtags;
+                        $phraseWithoutHash = substr($lowerCasePhrase, 1);
+                        foreach ($hashtagObjects as $hashtagObject) {
+                            $hashtag = $hashtagObject->tag;
+                            $lowerCaseHashtag = strtolower($hashtag);
+                            if ($lowerCaseHashtag === $phraseWithoutHash) {
+                                return array("operation" => $subjectUserInfo['matchingphraseoperation'], "filtertype" => "matchingphrase",
+                                    "filtercontent" => $phrase['phrase']);
+                            }
+                        }
+                    }
+                } else if (strpos($lowerCasePhrase, "$") === 0) {
+                    if (isset($objectUser->entities->description->cashtags)) {
+                        $cashtagObjects = $objectUser->entities->description->cashtags;
+                        $phraseWithoutHash = substr($lowerCasePhrase, 1);
+                        foreach ($cashtagObjects as $cashtagObject) {
+                            $cashtag = $cashtagObject->tag;
+                            $lowerCaseHashtag = strtolower($cashtag);
+                            if ($lowerCaseHashtag === $phraseWithoutHash) {
+                                return array("operation" => $subjectUserInfo['matchingphraseoperation'], "filtertype" => "matchingphrase",
+                                    "filtercontent" => $phrase['phrase']);
+                            }
+                        }
+                    }
+                } else if (strpos((String) $userDescription, (String) $lowerCasePhrase) !== false) {
                     return array("operation" => $subjectUserInfo['matchingphraseoperation'], "filtertype" => "matchingphrase",
                         "filtercontent" => $phrase['phrase']);
                 }

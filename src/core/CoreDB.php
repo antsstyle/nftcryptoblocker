@@ -12,6 +12,22 @@ class CoreDB {
 
     public static $databaseConnection;
 
+    public static function getConfiguration() {
+        $selectQuery = "SELECT * FROM centralconfiguration";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute();
+        if (!$success) {
+            error_log("Could not retrieve central configuration, returning.");
+            return false;
+        }
+        $configArray = [];
+        while ($row = $selectStmt->fetch()) {
+            $configArray[$row['name']] = $row['value'];
+        }
+        
+        return $configArray;
+    }
+
     public static function getFollowerCacheForUser($userTwitterID) {
         $selectQuery = "SELECT recentfollowerid FROM userfollowerscache WHERE usertwitterid=?";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
@@ -28,6 +44,13 @@ class CoreDB {
     }
 
     public static function updateFollowerCacheForUser($userTwitterID, $followerIDs) {
+        if (!is_array($followerIDs)) {
+            error_log("Follower IDs was not an array, cannot update follower cache.");
+            return;
+        }
+        if (count($followerIDs) == 0) {
+            return;
+        }
         $deleteQuery = "DELETE FROM userfollowerscache WHERE usertwitterid=?";
         $deleteStmt = CoreDB::$databaseConnection->prepare($deleteQuery);
         $success = $deleteStmt->execute([$userTwitterID]);
@@ -232,7 +255,7 @@ class CoreDB {
         $success = $selectStmt->execute([$userTwitterID]);
         if (!$success) {
             error_log("Could not retrieve user information, returning.");
-            return;
+            return null;
         }
         $row = $selectStmt->fetch();
         return $row;

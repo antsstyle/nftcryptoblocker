@@ -16,3 +16,4 @@ hs_err_pid*
 nbproject/
 vendor/
 Test.php
+Test.sh

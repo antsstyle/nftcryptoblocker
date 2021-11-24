@@ -16,12 +16,28 @@ if (!$_SESSION['oauth_token']) {
     exit();
 }
 
+if (!$_SESSION['usertwitterid']) {
+    $errorURL = Config::HOMEPAGE_URL . "error";
+    header("Location: $errorURL", true, 302);
+    exit();
+}
+
+$userInfo = CoreDB::getUserInfo($_SESSION['usertwitterid']);
+if ($userInfo === false) {
+    $errorURL = Config::HOMEPAGE_URL . "error";
+    header("Location: $errorURL", true, 302);
+    exit();
+} else if ($userInfo === null) {
+    $errorURL = Config::HOMEPAGE_URL . "error";
+    header("Location: $errorURL", true, 302);
+    exit();
+}
+
 $blockListNames = CoreDB::getBlockListNames();
 $blockablePhrases = CoreDB::getBlockablePhrases();
 $blockableURLs = CoreDB::getBlockableURLs();
 $blockableURLsPage = Config::HOMEPAGE_URL . "blockableurls";
-$blockablePhrasesPage =  Config::HOMEPAGE_URL . "blockablephrases";
-
+$blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
 ?>
 
 

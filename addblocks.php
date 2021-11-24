@@ -16,11 +16,22 @@ if (!$_SESSION['usertwitterid']) {
     exit();
 }
 
+$userInfo = CoreDB::getUserInfo($_SESSION['usertwitterid']);
+if ($userInfo === false) {
+    $errorURL = Config::HOMEPAGE_URL . "error";
+    header("Location: $errorURL", true, 302);
+    exit();
+} else if ($userInfo === null) {
+    $errorURL = Config::HOMEPAGE_URL . "error";
+    header("Location: $errorURL", true, 302);
+    exit();
+}
+
 $errors = 0;
 $successful = 0;
 foreach ($blockListNames as $blockListName) {
     $listToSet = filter_input(INPUT_POST, str_replace(" ", "_", $blockListName), FILTER_SANITIZE_STRING);
-    if ($listToSet !== null) {
+    if (!is_null($listToSet)) {
         $parameters = explode("_", $listToSet);
         if (!in_array($parameters[1], $blockListNames)) {
             $errors++;

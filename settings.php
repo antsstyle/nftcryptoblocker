@@ -48,7 +48,7 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
     </head>
     <title>
-        NFT Artist Blocker
+        NFT Artist & Cryptobro Blocker
     </title>
     <body onload="getUserInformation('<?php echo $_SESSION['usertwitterid']; ?>')">
         <div class="start">
@@ -61,6 +61,8 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
             </h2>
             Be aware that Twitter sometimes flags mass blocking or muting as 'automated activity', and as such Twitter might temporarily limit your activities 
             or require you to verify your identity with a phone number when using this app. It is impossible to say who will and won't be affected by this.
+            <br/><br/>
+            This app performs blocks and mutes in small batches to try and avoid this, but it can't be guaranteed to avoid it.
         </div>
         <p>
             <?php

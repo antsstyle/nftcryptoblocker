@@ -30,11 +30,11 @@ $url = $connection->url('oauth/authenticate', array('oauth_token' => $oauth_toke
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
     </head>
     <title>
-        NFT Artist Blocker
+        NFT Artist & Cryptobro Blocker
     </title>
     <body>
         <p>
-            The NFT Artist Blocker can automatically block all NFT artists on Antsstyle's current list for your account. You can find the list here 
+            The NFT Artist & Cryptobro Blocker can automatically block all NFT artists on Antsstyle's current list for your account. You can find the list here 
             (opens in a new tab):
             <a href="https://docs.google.com/spreadsheets/d/1FYwjh0hewS-KMseh51GdZFBXrE4136VdfwPn0wjW3qk/edit?usp=sharing" target="_blank">
                 NFT Artists not worth your time or money</a>
@@ -53,7 +53,7 @@ $url = $connection->url('oauth/authenticate', array('oauth_token' => $oauth_toke
             Once you sign in, you will be taken to the settings page. The app will not block or mute anything until you save your settings.
         </p>
         <p>
-            To use the NFT Artist Blocker, you must first sign in with Twitter. Use the button below to proceed.
+            To use this app, you must first sign in with Twitter. Use the button below to proceed.
         </p>
         <br/>
         <a href=<?php echo "$url" ?>>

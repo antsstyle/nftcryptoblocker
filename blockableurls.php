@@ -18,7 +18,7 @@ $blockableURLs = CoreDB::getBlockableURLs();
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
     </head>
     <title>
-        NFT Artist Blocker
+        NFT Artist & Cryptobro Blocker
     </title>
     <body>
         <h2> Blockable URLs </h2>

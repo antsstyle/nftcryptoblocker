@@ -3,12 +3,98 @@
 namespace Antsstyle\NFTArtistBlocker\Core;
 
 use Antsstyle\NFTArtistBlocker\Core\Config;
-use Antsstyle\NFTArtistBlocker\Core\StatusCodes;
+use Antsstyle\NFTArtistBlocker\Core\StatusCode;
+use Antsstyle\NFTArtistBlocker\Credentials\AdminUserAuth;
 use Antsstyle\NFTArtistBlocker\Credentials\APIKeys;
 use Antsstyle\NFTArtistBlocker\Core\CoreDB;
 use Abraham\TwitterOAuth\TwitterOAuth;
 
 class TwitterUsers {
+
+    public static function testUserSearch($query) {
+        $endpoint = "users/search";
+        $params['count'] = 20;
+        $params['q'] = $query;
+        error_log("Query parameter: $query");
+        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
+                AdminUserAuth::access_token, AdminUserAuth::access_token_secret);
+        $connection->setRetries(1, 1);
+        for ($i = 0; $i < 1; $i++) {
+            $params['page'] = $i;
+            $response = $connection->get($endpoint, $params);
+            CoreDB::updateTwitterEndpointLogs($endpoint, 1);
+            $statusCode = Core::checkResponseHeadersForErrors($connection);
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+                break;
+            }
+        }
+        return $response;
+    }
+
+    public static function userSearchAllBlockableEntries() {
+        $phrases = CoreDB::getBlockablePhrases();
+        $urls = CoreDB::getBlockableURLs();
+        $regexes = CoreDB::getBlockableUsernameRegexes();
+        if (!$phrases || !$urls || !$regexes) {
+            error_log("Could not retrieve filters for user mentions, returning.");
+            return;
+        }
+        foreach ($phrases as $phrase) {
+            self::userSearch($phrase, $phrases, $urls, $regexes);
+        }
+        foreach ($urls as $url) {
+            self::userSearch("url:" . $url, $phrases, $urls, $regexes);
+        }
+    }
+
+    public static function userSearch($query, $phrases, $urls, $regexes) {
+        $endpoint = "users/search";
+        $params['count'] = 20;
+        $params['q'] = $query;
+        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
+                AdminUserAuth::access_token, AdminUserAuth::access_token_secret);
+        $connection->setRetries(1, 1);
+        $insertParams = [];
+        for ($i = 0; $i < 50; $i++) {
+            $params['page'] = $i;
+            $response = $connection->get($endpoint, $params);
+            CoreDB::updateTwitterEndpointLogs($endpoint, 1);
+            $statusCode = Core::checkResponseHeadersForErrors($connection);
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+                break;
+            }
+            $subjectUserInfo['matchingphraseoperation'] = "Block";
+            foreach ($response as $userObject) {
+                $filtersMatched = self::checkNFTFilters($subjectUserInfo, $userObject, $phrases, $urls, $regexes);
+                if ($filtersMatched) {
+                    error_log("Filters matched for users/search! Object user ID: $userObject->id. Filter was:");
+                    error_log(print_r($filtersMatched, true));
+
+                    $insertParams[] = [$userObject->id, $filtersMatched['filtertype'],
+                        $filtersMatched['filtercontent'], "users/search"];
+                    // Add to entries to process along with reason information
+                }
+            }
+        }
+        return $response;
+    }
+
+    // Gets a user object, given an access token.
+    public static function getUserObject($userAuth, $userTwitterID) {
+        $params['user.fields'] = "entities,description,name,profile_image_url,url,username,id";
+        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
+                $userAuth['accesstoken'], $userAuth['accesstokensecret']);
+        $connection->setApiVersion('2');
+        $connection->setRetries(1, 1);
+        $query = "users/" . $userTwitterID;
+        $response = $connection->get($query, $params);
+        CoreDB::updateTwitterEndpointLogs("users/:id", 1);
+        $statusCode = Core::checkResponseHeadersForErrors($connection);
+        if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+            return null;
+        }
+        return $response;
+    }
 
     public static function checkNFTFollowersForAllUsers() {
         $selectQuery = "SELECT value FROM centralconfiguration WHERE name=?";
@@ -26,10 +112,10 @@ class TwitterUsers {
         $timeIntervalSecondsString = "-" . $timeIntervalSeconds . " seconds";
         $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid"
                 . " WHERE (nftfollowersoperation=? OR nftfollowersoperation=?) "
-                . "AND (followersendreached=? OR followerslastcheckedtime <= ?)";
+                . "AND (followersendreached=? OR followerslastcheckedtime <= ?) AND locked=?";
         $dateThreshold = date("Y-m-d H:i:s", strtotime($timeIntervalSecondsString));
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute(["Block", "Mute", "N", $dateThreshold]);
+        $success = $selectStmt->execute(["Block", "Mute", "N", $dateThreshold, "N"]);
         if (!$success) {
             error_log("Could not get users to check NFT followers for, returning.");
             return;
@@ -61,7 +147,6 @@ class TwitterUsers {
         $connection->setApiVersion('2');
         $connection->setRetries(1, 1);
         $returnedPages = 0;
-        $highestCheckedUserID = 0;
         $noMorePages = false;
         if ($userRow['followersendreached'] == "Y") {
             $followerCache = CoreDB::getFollowerCacheForUser($userRow['usertwitterid']);
@@ -72,20 +157,19 @@ class TwitterUsers {
             $query = "users/" . $userRow['usertwitterid'] . "/followers";
             $response = $connection->get($query, $params);
             CoreDB::updateTwitterEndpointLogs("users/:id/followers", 1);
-            $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode != StatusCodes::QUERY_OK) {
+            $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
                 break;
             }
             $returnedPages++;
             $users = $response->data;
-            if (count($users) == 0) {
+            if (!isset($users) || count($users) == 0) {
                 $noMorePages = true;
                 break;
             }
 
             foreach ($users as $objectUser) {
                 if (count($returnedFollowerIDs) < 25) {
-                    $userID = $objectUser->id;
                     $returnedFollowerIDs[] = $objectUser->id;
                 }
 
@@ -93,17 +177,15 @@ class TwitterUsers {
                 // check description, profile picture: add block to entries to process if match found
                 $filtersMatched = self::checkNFTFilters($userRow, $objectUser, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
-                    error_log("Filters matched! Object user:");
-                    error_log(print_r($objectUser, true));
-                    error_log("Filter:");
+                    error_log("Filters matched! Object user ID: $objectUser->id. Filter was:");
                     error_log(print_r($filtersMatched, true));
                     if ($filtersMatched['operation'] == "Block") {
                         $insertParams[] = [$userRow['usertwitterid'], $objectUser->id, "Block", $filtersMatched['filtertype'],
-                            $filtersMatched['filtercontent'], "Y"];
+                            $filtersMatched['filtercontent'], "Y", "users/:id/followers"];
                         // Add to entries to process along with reason information
                     } else if ($filtersMatched['operation'] == "Mute") {
                         $insertParams[] = [$userRow['usertwitterid'], $objectUser->id, "Mute", $filtersMatched['filtertype'],
-                            $filtersMatched['filtercontent'], "Y"];
+                            $filtersMatched['filtercontent'], "Y", "users/:id/followers"];
                         // Add to entries to process along with reason information
                     } else {
                         $userOp = $filtersMatched['operation'];
@@ -162,7 +244,7 @@ class TwitterUsers {
 
 
         $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
-                . "matchedfiltertype,matchedfiltercontent,addtocentraldb) VALUES (?,?,?,?,?,?)";
+                . "matchedfiltertype,matchedfiltercontent,addtocentraldb,addedfrom) VALUES (?,?,?,?,?,?,?)";
         CoreDB::$databaseConnection->beginTransaction();
         foreach ($insertParams as $insertParamsForUser) {
             $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
@@ -172,13 +254,27 @@ class TwitterUsers {
     }
 
     public static function checkNFTFilters($subjectUserInfo, $objectUser, $phrases, $urls, $regexes) {
-        if (isset($objectUser->entities->url)) {
+        $userURLHosts = [];
+        $userURLs = $objectUser->entities->url;
+        if (isset($userURLs)) {
             $userURLs = $objectUser->entities->url;
             if (is_array($userURLs) && count($userURLs) > 0) {
                 $userURL = $userURLs[0]->expanded_url;
                 $userURL = filter_var($userURL, FILTER_VALIDATE_URL);
                 if ($userURL) {
-                    $userURLHost = strtolower(parse_url($userURL, PHP_URL_HOST));
+                    $userURLHosts[] = strtolower(parse_url($userURL, PHP_URL_HOST));
+                }
+            }
+        }
+        $descriptionURLs = $objectUser->entities->description->urls;
+        if (isset($descriptionURLs) && is_array($descriptionURLs)) {
+            foreach ($descriptionURLs as $descriptionURL) {
+                $expandedURL = $descriptionURL->expanded_url;
+                if (isset($expandedURL)) {
+                    $expandedURL = filter_var($expandedURL, FILTER_VALIDATE_URL);
+                    if ($expandedURL) {
+                        $userURLHosts[] = strtolower(parse_url($expandedURL, PHP_URL_HOST));
+                    }
                 }
             }
         }
@@ -221,14 +317,18 @@ class TwitterUsers {
         }
         if ($subjectUserInfo['nftprofilepictureoperation'] == "Block" || $subjectUserInfo['nftprofilepictureoperation'] == "Mute") {
             if ($objectUser->ext_has_nft_avatar) {
-                return array("operation" => $subjectUserInfo['nftprofilepictureoperation'], "filtertype" => "nftprofilepictures", "filtercontent" => null);
+                return array("operation" => $subjectUserInfo['nftprofilepictureoperation'], "filtertype" => "nftprofilepictures",
+                    "filtercontent" => null);
             }
         }
         if ($subjectUserInfo['profileurlsoperation'] == "Block" || $subjectUserInfo['profileurlsoperation'] == "Mute") {
             foreach ($urls as $url) {
                 $urlHost = strtolower(parse_url($url['url'], PHP_URL_HOST));
-                if (isset($userURLHost) && (strpos((String) $urlHost, (String) $userURLHost) !== false)) {
-                    return array("operation" => $subjectUserInfo['profileurlsoperation'], "filtertype" => "profileurls", "filtercontent" => $url['url']);
+                foreach ($userURLHosts as $userURLHost) {
+                    if (isset($userURLHost) && (strpos((String) $urlHost, (String) $userURLHost) !== false)) {
+                        return array("operation" => $subjectUserInfo['profileurlsoperation'], "filtertype" => "profileurls",
+                            "filtercontent" => $url['url']);
+                    }
                 }
             }
         }

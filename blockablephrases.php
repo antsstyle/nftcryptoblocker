@@ -10,12 +10,6 @@ use Antsstyle\NFTArtistBlocker\Core\CoreDB;
 Session::checkSession();
 
 $blockablePhrases = CoreDB::getBlockablePhrases();
-
-if (!$blockablePhrases) {
-    echo "";
-} else {
-    echo "";
-}
 ?>
 
 <html>
@@ -28,20 +22,24 @@ if (!$blockablePhrases) {
     </title>
     <body>
         <h2> Blockable phrases </h2>
-            <p>
-                These are the phrases for which matching users will be auto-blocked or auto-muted if they post them in your timeline, in your mentions,
-                or have them in their user profile. <br/><br/>
-                They are case-insensitive.
-            </p>
-            <table>
-                <tr>
-                    <th>Blockable phrase</th>
-                </tr>
-                <?php
+        <p>
+            These are the phrases for which matching users will be auto-blocked or auto-muted if their posts appear in your timeline, in your mentions,
+            or have them in their user profile. <br/><br/>
+            They are case-insensitive.
+        </p>
+        <table>
+            <tr>
+                <th>Blockable phrase</th>
+            </tr>
+            <?php
+            if (!$blockablePhrases) {
+                echo "Error: could not load list of blockable phrases.";
+            } else {
                 foreach ($blockablePhrases as $blockablePhrase) {
                     echo "<tr><td>" . $blockablePhrase['phrase'] . "</td></tr>";
                 }
-                ?>
-            </table>
+            }
+            ?>
+        </table>
     </body>
 </html>

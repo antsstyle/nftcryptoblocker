@@ -2,7 +2,7 @@
 
 namespace Antsstyle\NFTArtistBlocker\Core;
 
-use Antsstyle\NFTArtistBlocker\Core\StatusCodes;
+use Antsstyle\NFTArtistBlocker\Core\StatusCode;
 use Antsstyle\NFTArtistBlocker\Credentials\APIKeys;
 use Antsstyle\NFTArtistBlocker\Core\CoreDB;
 use Abraham\TwitterOAuth\TwitterOAuth;
@@ -17,24 +17,33 @@ class Core {
             if (isset($requestBody->errors) && is_array($requestBody->errors)) {
                 $error = $requestBody->errors[0];
                 $errorCode = $error->code;
-                if ($errorCode == StatusCodes::INVALID_ACCESS_TOKEN) {
+                if ($errorCode == StatusCode::TWITTER_INVALID_ACCESS_TOKEN) {
+                    error_log("Deleting user, invalid access token.");
                     CoreDB::deleteUser($userTwitterID);
-                    return StatusCodes::INVALID_ACCESS_TOKEN;
+                }
+                if ($errorCode == StatusCode::TWITTER_USER_ACCOUNT_LOCKED) {
+                    CoreDB::setUserLocked("Y", $userTwitterID);
+                }
+                if ($httpCode == StatusCode::HTTP_TOO_MANY_REQUESTS) {
+                    error_log("Warning: rate limits exceeded, received error 429!");
                 }
                 if (!(($httpCode >= 500 && $httpCode <= 599) || ($httpCode >= 200 && $httpCode <= 299))) {
-                    error_log("Response headers contained HTTP code: $httpCode. Response body was:");
+                    error_log("Response headers contained HTTP code: $httpCode, error code: $errorCode. Response body was:");
                     error_log(print_r($connection->getLastBody(), true));
                 }
+                return new StatusCode($httpCode, $errorCode);
             }
-            return $httpCode;
+            return new StatusCode($httpCode, StatusCode::NFTARTISTBLOCKER_QUERY_OK);
         }
         if (!isset($headers['x_rate_limit_remaining']) || !isset($headers['x_rate_limit_limit']) || !isset($headers['x_rate_limit_reset'])) {
-            return StatusCodes::QUERY_OK;
+            return new StatusCode(200, 0);
         }
         if ($headers['x_rate_limit_remaining'] == 0) {
-            return StatusCodes::RATE_LIMIT_ZERO;
+            $apiPath = $connection->getLastApiPath();
+            error_log("Reached rate limit zero. API path was: $apiPath");           
+            return new StatusCode(200, StatusCode::NFTARTISTBLOCKER_RATE_LIMIT_ZERO);
         }
-        return StatusCodes::QUERY_OK;
+        return new StatusCode(200, 0);
     }
 
     public static function checkWhitelistForUser($userRow, $potentialIDs) {
@@ -70,8 +79,8 @@ class Core {
         foreach ($paramStrings as $paramString) {
             $friendships = $connection->get("friendships/lookup", ['user_id' => $paramString]);
             CoreDB::updateTwitterEndpointLogs("friendships/lookup", 1);
-            $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode != StatusCodes::QUERY_OK) {
+            $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
                 return null;
             }
             foreach ($friendships as $friendship) {
@@ -118,8 +127,8 @@ class Core {
         foreach ($paramStrings as $paramString) {
             $friendships = $connection->get("friendships/lookup", ['user_id' => $paramString]);
             CoreDB::updateTwitterEndpointLogs("friendships/lookup", 1);
-            $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode != StatusCodes::QUERY_OK) {
+            $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
                 return null;
             }
             foreach ($friendships as $friendship) {
@@ -168,10 +177,9 @@ class Core {
             $blockList = $connection->get("mutes/users/ids", $params);
             CoreDB::updateTwitterEndpointLogs("mutes/users/ids", 1);
         }
-        $statusCode = Core::checkResponseHeadersForErrors($connection);
-        if ($statusCode != StatusCodes::QUERY_OK) {
-            error_log("Unable to retrieve block or mute list for user ID $userTwitterID!");
-            return null;
+        $statusCode = Core::checkResponseHeadersForErrors($connection, $userTwitterID);
+        if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+            return;
         }
         $insertQuery = "INSERT IGNORE INTO userinitialblockrecords (subjectusertwitterid,objectusertwitterid,operation)"
                 . " VALUES (?,?,?)";
@@ -184,7 +192,80 @@ class Core {
         CoreDB::$databaseConnection->commit();
     }
 
-    public static function CheckUserFiltersHomeTimeline($tweet, $userInfo, $phrases, $urls, $regexes) {
+    // Uses the user object returned for the tweet, not the tweet itself
+    public static function checkFiltersForTweetSearch($userObject, $phrases, $urls, $regexes) {
+        error_log(print_r($userObject, true));
+        $tweetUserURLs = $userObject->entities->url;
+        if (is_array($tweetUserURLs) && count($tweetUserURLs) > 0) {
+            $tweetUserURL = $tweetUserURLs[0]->expanded_url;
+            $tweetUserURL = filter_var($tweetUserURL, FILTER_VALIDATE_URL);
+            if ($tweetUserURL) {
+                $tweetURLHost = strtolower(parse_url($tweetUserURL, PHP_URL_HOST));
+            }
+        }
+        $tweetUserDescription = $userObject->description;
+
+        foreach ($phrases as $phrase) {
+            $lowerCasePhrase = strtolower($phrase['phrase']);
+            // Check entities instead of text for hashtags and cashtags
+            if (strpos($lowerCasePhrase, "#") === 0) {
+                if (isset($userObject->entities->description->hashtags)) {
+                    $hashtagObjects = $userObject->entities->description->hashtags;
+                    $phraseWithoutHash = substr($lowerCasePhrase, 1);
+                    foreach ($hashtagObjects as $hashtagObject) {
+                        $hashtag = $hashtagObject->tag;
+                        $lowerCaseHashtag = strtolower($hashtag);
+                        if ($lowerCaseHashtag === $phraseWithoutHash) {
+                            return array("filtertype" => "matchingphrase",
+                                "filtercontent" => $phrase['phrase']);
+                        }
+                    }
+                }
+            } else if (strpos($lowerCasePhrase, "$") === 0) {
+                if (isset($userObject->entities->description->cashtags)) {
+                    $cashtagObjects = $userObject->entities->description->cashtags;
+                    $phraseWithoutHash = substr($lowerCasePhrase, 1);
+                    foreach ($cashtagObjects as $cashtagObject) {
+                        $cashtag = $cashtagObject->tag;
+                        $lowerCaseHashtag = strtolower($cashtag);
+                        if ($lowerCaseHashtag === $phraseWithoutHash) {
+                            return array("filtertype" => "matchingphrase",
+                                "filtercontent" => $phrase['phrase']);
+                        }
+                    }
+                }
+            } else if (strpos((String) $tweetUserDescription, (String) $lowerCasePhrase) !== false) {
+                return array("filtertype" => "matchingphrase",
+                    "filtercontent" => $phrase['phrase']);
+            }
+        }
+
+
+        if ($userObject->ext_has_nft_avatar) {
+            return array("filtertype" => "nftprofilepictures", "filtercontent" => null);
+        }
+
+
+        foreach ($urls as $url) {
+            $urlHost = strtolower(parse_url($url['url'], PHP_URL_HOST));
+            if (isset($tweetURLHost) && (strpos((String) $urlHost, (String) $tweetURLHost) !== false)) {
+                return array("filtertype" => "profileurls", "filtercontent" => $url['url']);
+            }
+        }
+
+
+        foreach ($regexes as $regex) {
+            $userName = strtolower($userObject->name);
+            if (preg_match($regex['regex'], $userName)) {
+                return array("filtertype" => "cryptousernames",
+                    "filtercontent" => $regex['regex']);
+            }
+        }
+
+        return false;
+    }
+
+    public static function checkUserFiltersHomeTimeline($tweet, $userInfo, $phrases, $urls, $regexes) {
         $tweetUserURLs = $tweet->user->entities->url;
         if (is_array($tweetUserURLs) && count($tweetUserURLs) > 0) {
             $tweetUserURL = $tweetUserURLs[0]->expanded_url;
@@ -202,7 +283,34 @@ class Core {
         if ($userInfo['matchingphraseoperation'] == "Block" || $userInfo['matchingphraseoperation'] == "Mute") {
             foreach ($phrases as $phrase) {
                 $lowerCasePhrase = strtolower($phrase['phrase']);
-                if ((strpos((String) $tweetText, (String) $lowerCasePhrase) !== false) ||
+                // Check entities instead of text for hashtags and cashtags
+                if (strpos($lowerCasePhrase, "#") === 0) {
+                    if (isset($tweet->user->entities->description->hashtags)) {
+                        $hashtagObjects = $tweet->user->entities->description->hashtags;
+                        $phraseWithoutHash = substr($lowerCasePhrase, 1);
+                        foreach ($hashtagObjects as $hashtagObject) {
+                            $hashtag = $hashtagObject->tag;
+                            $lowerCaseHashtag = strtolower($hashtag);
+                            if ($lowerCaseHashtag === $phraseWithoutHash) {
+                                return array("operation" => $userInfo['matchingphraseoperation'], "filtertype" => "matchingphrase",
+                                    "filtercontent" => $phrase['phrase']);
+                            }
+                        }
+                    }
+                } else if (strpos($lowerCasePhrase, "$") === 0) {
+                    if (isset($tweet->user->entities->description->cashtags)) {
+                        $cashtagObjects = $tweet->user->entities->description->cashtags;
+                        $phraseWithoutHash = substr($lowerCasePhrase, 1);
+                        foreach ($cashtagObjects as $cashtagObject) {
+                            $cashtag = $cashtagObject->tag;
+                            $lowerCaseHashtag = strtolower($cashtag);
+                            if ($lowerCaseHashtag === $phraseWithoutHash) {
+                                return array("operation" => $userInfo['matchingphraseoperation'], "filtertype" => "matchingphrase",
+                                    "filtercontent" => $phrase['phrase']);
+                            }
+                        }
+                    }
+                } else if ((strpos((String) $tweetText, (String) $lowerCasePhrase) !== false) ||
                         (strpos((String) $tweetUserDescription, (String) $lowerCasePhrase) !== false)) {
                     return array("operation" => $userInfo['matchingphraseoperation'], "filtertype" => "matchingphrase",
                         "filtercontent" => $phrase['phrase']);
@@ -252,8 +360,34 @@ class Core {
         if ($userInfo['matchingphraseoperation'] == "Block" || $userInfo['matchingphraseoperation'] == "Mute") {
             foreach ($phrases as $phrase) {
                 $lowerCasePhrase = strtolower($phrase['phrase']);
-                if ((strpos((String) $mentionTweetText, (String) $lowerCasePhrase) !== false) ||
-                        (strpos((String) $mentionUserDescription, (String) $lowerCasePhrase) !== false)) {
+                // Check entities instead of text for hashtags and cashtags
+                if (strpos($lowerCasePhrase, "#") === 0) {
+                    if (isset($mention->user->entities->description->hashtags)) {
+                        $hashtagObjects = $mention->user->entities->description->hashtags;
+                        $phraseWithoutHash = substr($lowerCasePhrase, 1);
+                        foreach ($hashtagObjects as $hashtagObject) {
+                            $hashtag = $hashtagObject->tag;
+                            $lowerCaseHashtag = strtolower($hashtag);
+                            if ($lowerCaseHashtag === $phraseWithoutHash) {
+                                return array("operation" => $userInfo['matchingphraseoperation'], "filtertype" => "matchingphrase",
+                                    "filtercontent" => $phrase['phrase']);
+                            }
+                        }
+                    }
+                } else if (strpos($lowerCasePhrase, "$") === 0) {
+                    if (isset($mention->user->entities->description->cashtags)) {
+                        $cashtagObjects = $mention->user->entities->description->cashtags;
+                        $phraseWithoutHash = substr($lowerCasePhrase, 1);
+                        foreach ($cashtagObjects as $cashtagObject) {
+                            $cashtag = $cashtagObject->tag;
+                            $lowerCaseHashtag = strtolower($cashtag);
+                            if ($lowerCaseHashtag === $phraseWithoutHash) {
+                                return array("operation" => $userInfo['matchingphraseoperation'], "filtertype" => "matchingphrase",
+                                    "filtercontent" => $phrase['phrase']);
+                            }
+                        }
+                    }
+                } else if (strpos((String) $mentionUserDescription, (String) $lowerCasePhrase) !== false) {
                     return array("operation" => $userInfo['matchingphraseoperation'], "filtertype" => "matchingphrase",
                         "filtercontent" => $phrase['phrase']);
                 }
@@ -298,7 +432,7 @@ class Core {
     }
 
     public static function processEntriesForUser($userTwitterID) {
-        $selectQuery = "SELECT * FROM entriestoprocess WHERE subjectusertwitterid=? LIMIT 50";
+        $selectQuery = "SELECT * FROM entriestoprocess WHERE subjectusertwitterid=? LIMIT 15";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute([$userTwitterID]);
         if (!$success) {
@@ -352,13 +486,13 @@ class Core {
                 }
                 $response = $connection->post($endpoint, $params);
                 CoreDB::updateTwitterEndpointLogs($endpoint, 1);
-                $statusCode = Core::checkResponseHeadersForErrors($connection);
-                if ($statusCode !== StatusCodes::QUERY_OK) {
+                $statusCode = Core::checkResponseHeadersForErrors($connection, $userTwitterID);
+                if ($statusCode->httpCode !== StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode !== StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
                     $objectUserTwitterID = $row['objectusertwitterid'];
-                    if ($statusCode === StatusCodes::USER_NOT_FOUND) {
+                    if ($statusCode->twitterCode === StatusCode::TWITTER_USER_NOT_FOUND) {
                         error_log("User with ID $objectUserTwitterID not found - cannot process entry, deleting.");
                         $deleteParams[] = $row['id'];
-                    } else if ($statusCode === StatusCodes::USER_ALREADY_UNMUTED) {
+                    } else if ($statusCode->twitterCode === StatusCode::TWITTER_USER_ALREADY_UNMUTED) {
                         error_log("User with ID $objectUserTwitterID is already unmuted, deleting entry.");
                         $deleteParams[] = $row['id'];
                     } else {
@@ -369,7 +503,8 @@ class Core {
                 if (is_object($response) && isset($response->id) && ($response->id == $row['objectusertwitterid'])) {
                     $deleteParams[] = $row['id'];
                     if ($row['addtocentraldb'] == "Y") {
-                        $centralBlockListInsertParams[] = [$row['objectusertwitterid'], $row['matchedfiltertype'], $row['matchedfiltercontent']];
+                        $centralBlockListInsertParams[] = [$row['objectusertwitterid'], $row['matchedfiltertype'], $row['matchedfiltercontent'],
+                            $row['addedfrom']];
                     }
                 }
             }

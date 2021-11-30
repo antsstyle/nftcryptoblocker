@@ -2,6 +2,7 @@
 
 namespace Antsstyle\NFTArtistBlocker\Core;
 
+use Antsstyle\NFTArtistBlocker\Credentials\AdminUserAuth;
 use Antsstyle\NFTArtistBlocker\Credentials\APIKeys;
 use Abraham\TwitterOAuth\TwitterOAuth;
 use Antsstyle\NFTArtistBlocker\Core\Core;
@@ -9,10 +10,33 @@ use Antsstyle\NFTArtistBlocker\Core\CoreDB;
 
 class TwitterTimelines {
 
+    public static function testMentionsTimeline() {
+        $queryParams['max_results'] = 100;
+        $queryParams['tweet.fields'] = "entities,text,in_reply_to_user_id";
+        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
+                AdminUserAuth::access_token, AdminUserAuth::access_token_secret);
+        $connection->setApiVersion('2');
+        $connection->setRetries(1, 1);
+        $query = "users/" . AdminUserAuth::user_id . "/mentions";
+        $response = $connection->get($query, $queryParams);
+        error_log(print_r($response, true));
+    }
+
+    public static function testHomeTimeline() {
+        $params['tweet_mode'] = "extended";
+        $params['count'] = 200;
+        $params['include_ext_has_nft_avatar'] = true;
+        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
+                AdminUserAuth::access_token, AdminUserAuth::access_token_secret);
+        $tweets = $connection->get("statuses/home_timeline", $params);
+        error_log(print_r($tweets, true));
+    }
+
     public static function checkHomeTimelineForAllUsers() {
-        $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid";
+        $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid"
+                . " WHERE locked=?";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute();
+        $success = $selectStmt->execute(["N"]);
         if (!$success) {
             error_log("Could not get users to retrieve all home timeline entries for, returning.");
             return;
@@ -53,8 +77,9 @@ class TwitterTimelines {
         while ($tweetCount > 0) {
             $tweets = $connection->get("statuses/home_timeline", $params);
             CoreDB::updateTwitterEndpointLogs("statuses/home_timeline", 1);
-            $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode != StatusCodes::QUERY_OK) {
+            $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
+            if ($statusCode->httpCode !== StatusCode::HTTP_QUERY_OK
+                    || $statusCode->twitterCode !== StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
                 break;
             }
             $tweetCount = count($tweets);
@@ -63,6 +88,10 @@ class TwitterTimelines {
                 break;
             }
             foreach ($tweets as $tweet) {
+                if (!is_null($userRow['hometimelinesinceid']) && ($tweet->id > $userRow['hometimelinesinceid'])) {
+                    $foundAllNewResults = true;
+                    break;
+                }
                 // no need to examine mentions by the user to themselves
                 if ($tweet->user->id == $userRow['usertwitterid']) {
                     $tweetID = $tweet->id;
@@ -74,18 +103,22 @@ class TwitterTimelines {
                     }
                     continue;
                 }
+                // if the user retweeted a status, we check the original status, not the retweet
+                if ($tweet->retweeted_status) {
+                    $tweet = $tweet->retweeted_status;
+                }
                 $filtersMatched = Core::checkUserFiltersHomeTimeline($tweet, $userRow, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
-                    error_log("Filters matched, filters array:");
+                    error_log("Filters matched for home timeline, filters array:");
                     error_log(print_r($filtersMatched, true));
-                    error_log("Filters matches, object user: ");
-                    error_log(print_r($tweet->user, true));
+                    $userID = $tweet->user->id;
+                    error_log("Filters matched for home timeline, object user ID: $userID");
                     if ($filtersMatched['operation'] == "Block") {
-                        $updateParams[] = [$userRow['usertwitterid'], $tweet->user->id, "Block", $filtersMatched['filtername'],
-                            $filtersMatched['filtercontent']];
+                        $insertParams[] = [$userRow['usertwitterid'], $tweet->user->id, "Block", $filtersMatched['filtertype'],
+                            $filtersMatched['filtercontent'], "Y", "statuses/home_timeline"];
                     } else if ($filtersMatched['operation'] == "Mute") {
-                        $updateParams[] = [$userRow['usertwitterid'], $tweet->user->id, "Mute", $filtersMatched['filtername'],
-                            $filtersMatched['filtercontent']];
+                        $insertParams[] = [$userRow['usertwitterid'], $tweet->user->id, "Mute", $filtersMatched['filtertype'],
+                            $filtersMatched['filtercontent'], "Y", "statuses/home_timeline"];
                     } else {
                         $userOp = $filtersMatched['operation'];
                         error_log("Unrecognised user automation operation, text was: $userOp");
@@ -104,6 +137,9 @@ class TwitterTimelines {
             } else {
                 $params['max_id'] = $lowestMaxID;
             }
+            if ($foundAllNewResults === true) {
+                break;
+            }
         }
         // Update since_id in DB
         if ($endReached && ($userRow['hometimelineendreached'] == "N")) {
@@ -120,7 +156,7 @@ class TwitterTimelines {
             $updateStmt->execute([$highestSinceID, $userRow['usertwitterid']]);
         }
         $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
-                . "matchedfiltername,matchedfiltercontent) VALUES (?,?,?,?,?)";
+                . "matchedfiltertype,matchedfiltercontent,addtocentraldb,addedfrom) VALUES (?,?,?,?,?,?,?)";
         CoreDB::$databaseConnection->beginTransaction();
         foreach ($insertParams as $insertParamsForUser) {
             $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
@@ -130,9 +166,10 @@ class TwitterTimelines {
     }
 
     public static function checkMentionsTimelineForAllUsers() {
-        $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid";
+        $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid"
+                . " WHERE locked=?";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute();
+        $success = $selectStmt->execute(["N"]);
         if (!$success) {
             error_log("Could not get users to retrieve all mentions for, returning.");
             return;
@@ -172,8 +209,9 @@ class TwitterTimelines {
             $query = "users/" . $userRow['usertwitterid'] . "/mentions";
             $response = $connection->get($query, $queryParams);
             CoreDB::updateTwitterEndpointLogs("users/:id/mentions", 1);
-            $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode != StatusCodes::QUERY_OK) {
+            $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK
+                    || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
                 break;
             }
             if (!isset($response->data)) {
@@ -181,29 +219,33 @@ class TwitterTimelines {
             }
             $mentions = $response->data;
             $metaInfo = $response->meta;
-            $userTwitterID = $userRow['usertwitterid'];
-            error_log("User twitter ID: $userTwitterID");
-            $mentionCount = count($mentions);
-            error_log("Mention count: $mentionCount");
             foreach ($mentions as $mention) {
                 // check description, profile picture: add block to entries to process if match found
                 $filtersMatched = Core::checkUserFiltersMentionTimeline($mention, $userRow, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
-                    error_log("Filters matched, filters array:");
+                    error_log("Filters matched for mentions timeline, filters array:");
                     error_log(print_r($filtersMatched, true));
-                    error_log("Filters matches, object user: ");
-                    error_log(print_r($mention->user, true));
-                    if ($filtersMatched['operation'] == "Block") {
-                        $insertParams[] = [$userRow['usertwitterid'], $mention->user->id, "Block", $filtersMatched['filtertype'],
-                            $filtersMatched['filtercontent'], "Y"];
-                        // Add to entries to process along with reason information
-                    } else if ($filtersMatched['operation'] == "Mute") {
-                        $insertParams[] = [$userRow['usertwitterid'], $mention->user->id, "Mute", $filtersMatched['filtertype'],
-                            $filtersMatched['filtercontent'], "Y"];
-                        // Add to entries to process along with reason information
+                    $userID = $mention->user->id;
+                    if (!isset($mention->user)) {
+                        error_log("ERROR: Mention user object not set!");
+                        error_log(print_r($mention, true));
+                    } else if (!isset($mention->user->id)) {
+                        error_log("ERROR: Mention user ID not set!");
+                        error_log(print_r($mention, true));
                     } else {
-                        $userOp = $filtersMatched['operation'];
-                        error_log("Unrecognised user automation operation, text was: $userOp");
+                        error_log("Filters matched for mentions timeline, object user ID: $userID");
+                        if ($filtersMatched['operation'] == "Block") {
+                            $insertParams[] = [$userRow['usertwitterid'], $mention->user->id, "Block", $filtersMatched['filtertype'],
+                                $filtersMatched['filtercontent'], "Y", "users/:id/mentions"];
+                            // Add to entries to process along with reason information
+                        } else if ($filtersMatched['operation'] == "Mute") {
+                            $insertParams[] = [$userRow['usertwitterid'], $mention->user->id, "Mute", $filtersMatched['filtertype'],
+                                $filtersMatched['filtercontent'], "Y", "users/:id/mentions"];
+                            // Add to entries to process along with reason information
+                        } else {
+                            $userOp = $filtersMatched['operation'];
+                            error_log("Unrecognised user automation operation, text was: $userOp");
+                        }
                     }
                 }
                 $tweetID = $mention->id;
@@ -240,7 +282,7 @@ class TwitterTimelines {
         }
 
         $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
-                . "matchedfiltertype,matchedfiltercontent,addtocentraldb) VALUES (?,?,?,?,?,?)";
+                . "matchedfiltertype,matchedfiltercontent,addtocentraldb,addedfrom) VALUES (?,?,?,?,?,?,?)";
         CoreDB::$databaseConnection->beginTransaction();
         foreach ($insertParams as $insertParamsForUser) {
             $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);

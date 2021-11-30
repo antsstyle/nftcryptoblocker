@@ -1,0 +1,3 @@
+To use this app in production, rename the "credentialstemplate" folder to "credentials", and fill in the required credentials in each file.
+
+Be sure to change the namespace declarations as well.

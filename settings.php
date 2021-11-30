@@ -54,7 +54,13 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
         <div class="start">
             Twitter authentication successful. Choose the settings you want below and press the 'Save Settings' button at the bottom of the page
             (if you already have saved settings, they will be preselected).<br/>
-            Note that it can take up to an hour for your settings to go into effect, due to Twitter rate limits.
+            Note that your settings will take some time to go into effect, due to Twitter rate limits.
+            <br/><br/>
+            <h2>
+                Warning
+            </h2>
+            Be aware that Twitter sometimes flags mass blocking or muting as 'automated activity', and as such Twitter might temporarily limit your activities 
+            or require you to verify your identity with a phone number when using this app. It is impossible to say who will and won't be affected by this.
         </div>
         <p>
             <?php
@@ -113,7 +119,7 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
             echo "<input type=\"radio\" id=\"noaction nftprofilepictures\" name=\"nftprofilepictures\" value=\"noaction_nftprofilepictures\" checked=\"checked\">";
             echo "<label for=\"noaction nftprofilepictures\"> Do nothing </label></div><br/><br/>";
 
-            echo "<b>Users with .eth in their display name:</b>";
+            echo "<b>Users with cryptocurrencies (e.g. .eth or .sol) at the end of their display name:</b>";
             echo "<br/><br/><div class=\"formsection\">";
             echo "<input type=\"radio\" id=\"block cryptousernames\" name=\"cryptousernames\" value=\"block_cryptousernames\">";
             echo "<label for=\"block cryptousernames\"> Block </label>";
@@ -135,10 +141,11 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
             echo "<input type=\"radio\" id=\"noaction nftfollowers\" name=\"nftfollowers\" value=\"noaction_nftfollowers\" checked=\"checked\">";
             echo "<label for=\"noaction nftfollowers\"> Do nothing </label></div><br/><br/>";
 
-            echo "<b>Block all users in NFT Artist Blocker's database?</b>";
+            echo "<b>Central database</b>";
             echo "<br/><br/>"
-            . "When anyone blocks a user via one of the above auto-block or auto-mute options, this app keeps a record of it. "
-            . "If you enable this option, you can block all users in that database."
+            . "When anyone blocks a user via one of the above auto-block or auto-mute options, this app keeps a record of that user and which filter they matched. "
+            . "If you enable this option, you can block or mute all users in that database. It will only do this for central"
+            . " database entries that match filters you have chosen to block or mute above."
             . "<br/><br/>"
             . "<div class=\"formsection\">";
             echo "<input type=\"radio\" id=\"block centraldatabase\" name=\"centraldatabase\" value=\"block_centraldatabase\">";
@@ -148,7 +155,7 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
             echo "<input type=\"radio\" id=\"noaction centraldatabase\" name=\"centraldatabase\" value=\"noaction_centraldatabase\" checked=\"checked\">";
             echo "<label for=\"noaction centraldatabase\"> Do nothing </label></div><br/><br/>";
 
-            echo "<b>Follower whitelist</b>";
+            echo "<b>Following whitelist</b>";
             echo "<br/><br/>"
             . "By default, NFT Artist Blocker will not block anyone you follow, even if they match your filter criteria. "
             . "You can disable this option here if you like."

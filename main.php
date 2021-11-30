@@ -50,6 +50,9 @@ $url = $connection->url('oauth/authenticate', array('oauth_token' => $oauth_toke
         </ol>
         </p>
         <p>
+            Once you sign in, you will be taken to the settings page. The app will not block or mute anything until you save your settings.
+        </p>
+        <p>
             To use the NFT Artist Blocker, you must first sign in with Twitter. Use the button below to proceed.
         </p>
         <br/>

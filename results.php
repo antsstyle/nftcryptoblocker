@@ -13,7 +13,8 @@ use Abraham\TwitterOAuth\TwitterOAuth;
 Session::checkSession();
 
 if (!$_SESSION['oauth_token']) {
-    header("Location: https://antsstyle.com/nftartistblocker/error", true, 302);
+    $location = Config::HOMEPAGE_URL . "error";
+    header("Location: $location", true, 302);
     exit();
 }
 
@@ -32,15 +33,24 @@ if ($request_token['oauth_token'] !== $requestOAuthToken) {
 
 $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
         $request_token['oauth_token'], $request_token['oauth_token_secret']);
-$access_token = $connection->oauth("oauth/access_token", ["oauth_verifier" => $requestOAuthVerifier]);
-
-$success = CoreDB::insertUserInformation($access_token);
-error_log("Success: $success");
-if ($success) {
-    $_SESSION['usertwitterid'] = $access_token['user_id'];
-    $location = Config::SETTINGSPAGE_URL;
-    header("Location: $location", true, 302);
-} else {
+try {
+    $access_token = $connection->oauth("oauth/access_token", ["oauth_verifier" => $requestOAuthVerifier]);
+} catch (Exception $e) {
+    error_log("Could not get access token");
+    error_log(print_r($e, true));
     $location = Config::HOMEPAGE_URL . "failure";
     header("Location: $location", true, 302);
 }
+
+if (isset($access_token)) {
+    $success = CoreDB::insertUserInformation($access_token);
+    if ($success) {
+        $_SESSION['usertwitterid'] = $access_token['user_id'];
+        $location = Config::SETTINGSPAGE_URL;
+        header("Location: $location", true, 302);
+    } else {
+        $location = Config::HOMEPAGE_URL . "failure";
+        header("Location: $location", true, 302);
+    }
+}
+

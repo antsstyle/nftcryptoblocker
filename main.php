@@ -2,14 +2,14 @@
 
 require 'vendor/autoload.php';
 
-use Antsstyle\NFTArtistBlocker\Core\Session;
-use Antsstyle\NFTArtistBlocker\Credentials\APIKeys;
+use Antsstyle\NFTCryptoBlocker\Core\Session;
+use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
 use Abraham\TwitterOAuth\TwitterOAuth;
 
 Session::checkSession();
 
 $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret);
-$response = $connection->oauth("oauth/request_token", ["oauth_callback" => "https://antsstyle.com/nftartistblocker/results"]);
+$response = $connection->oauth("oauth/request_token", ["oauth_callback" => "https://antsstyle.com/nftcryptoblocker/results"]);
 $httpcode = $connection->getLastHttpCode();
 if ($httpcode != 200) {
     error_log("Failed to get request token!");

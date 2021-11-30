@@ -1,12 +1,12 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker\Core;
+namespace Antsstyle\NFTCryptoBlocker\Core;
 
-use Antsstyle\NFTArtistBlocker\Core\Config;
-use Antsstyle\NFTArtistBlocker\Core\StatusCode;
-use Antsstyle\NFTArtistBlocker\Credentials\AdminUserAuth;
-use Antsstyle\NFTArtistBlocker\Credentials\APIKeys;
-use Antsstyle\NFTArtistBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\Config;
+use Antsstyle\NFTCryptoBlocker\Core\StatusCode;
+use Antsstyle\NFTCryptoBlocker\Credentials\AdminUserAuth;
+use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
+use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 use Abraham\TwitterOAuth\TwitterOAuth;
 
 class TwitterUsers {
@@ -24,7 +24,7 @@ class TwitterUsers {
             $response = $connection->get($endpoint, $params);
             CoreDB::updateTwitterEndpointLogs($endpoint, 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
             }
         }
@@ -60,7 +60,7 @@ class TwitterUsers {
             $response = $connection->get($endpoint, $params);
             CoreDB::updateTwitterEndpointLogs($endpoint, 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
             }
             $subjectUserInfo['matchingphraseoperation'] = "Block";
@@ -90,7 +90,7 @@ class TwitterUsers {
         $response = $connection->get($query, $params);
         CoreDB::updateTwitterEndpointLogs("users/:id", 1);
         $statusCode = Core::checkResponseHeadersForErrors($connection);
-        if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+        if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
             return null;
         }
         return $response;
@@ -158,7 +158,7 @@ class TwitterUsers {
             $response = $connection->get($query, $params);
             CoreDB::updateTwitterEndpointLogs("users/:id/followers", 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
             }
             $returnedPages++;

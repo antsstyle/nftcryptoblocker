@@ -1,12 +1,12 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker;
+namespace Antsstyle\NFTCryptoBlocker;
 
 require __DIR__ . '/vendor/autoload.php';
 
-use Antsstyle\NFTArtistBlocker\Core\Session;
-use Antsstyle\NFTArtistBlocker\Core\Config;
-use Antsstyle\NFTArtistBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\Session;
+use Antsstyle\NFTCryptoBlocker\Core\Config;
+use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 
 Session::checkSession();
 

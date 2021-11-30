@@ -1,6 +1,6 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker\TestCredentials;
+namespace Antsstyle\NFTCryptoBlocker\TestCredentials;
 
 class DB {
     

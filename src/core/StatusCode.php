@@ -1,6 +1,6 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker\Core;
+namespace Antsstyle\NFTCryptoBlocker\Core;
 
 class StatusCode {
     const HTTP_SERVICE_UNAVAILABLE = 503;
@@ -25,8 +25,8 @@ class StatusCode {
     const TWITTER_USER_ALREADY_UNMUTED = 272;
     const TWITTER_USER_ACCOUNT_LOCKED = 326;
     
-    const NFTARTISTBLOCKER_RATE_LIMIT_ZERO = -1;
-    const NFTARTISTBLOCKER_QUERY_OK = 0;
+    const NFTCRYPTOBLOCKER_RATE_LIMIT_ZERO = -1;
+    const NFTCRYPTOBLOCKER_QUERY_OK = 0;
     
     public $httpCode;
     public $twitterCode;

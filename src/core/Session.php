@@ -1,6 +1,6 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker\Core;
+namespace Antsstyle\NFTCryptoBlocker\Core;
 
 class Session {
 

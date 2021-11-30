@@ -2,7 +2,7 @@
 
 require __DIR__ . '/vendor/autoload.php';
 
-use Antsstyle\NFTArtistBlocker\Core\Config;
+use Antsstyle\NFTCryptoBlocker\Core\Config;
 
 ?>
 

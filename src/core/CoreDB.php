@@ -1,8 +1,8 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker\Core;
+namespace Antsstyle\NFTCryptoBlocker\Core;
 
-use Antsstyle\NFTArtistBlocker\Credentials\DB;
+use Antsstyle\NFTCryptoBlocker\Credentials\DB;
 
 class CoreDB {
 

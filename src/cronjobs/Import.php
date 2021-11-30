@@ -1,6 +1,6 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker\Cronjobs;
+namespace Antsstyle\NFTCryptoBlocker\Cronjobs;
 
 chdir(dirname(__DIR__, 2));
 
@@ -8,7 +8,7 @@ $dir = getcwd();
 
 require $dir . '/vendor/autoload.php';
 
-use Antsstyle\NFTArtistBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 
 /*
  * This expects a CSV with "Name", "Twitter handle" as the first two columns -

@@ -1,10 +1,10 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker\Core;
+namespace Antsstyle\NFTCryptoBlocker\Core;
 
-use Antsstyle\NFTArtistBlocker\Core\StatusCode;
-use Antsstyle\NFTArtistBlocker\Credentials\APIKeys;
-use Antsstyle\NFTArtistBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\StatusCode;
+use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
+use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 use Abraham\TwitterOAuth\TwitterOAuth;
 
 class Core {
@@ -33,7 +33,7 @@ class Core {
                 }
                 return new StatusCode($httpCode, $errorCode);
             }
-            return new StatusCode($httpCode, StatusCode::NFTARTISTBLOCKER_QUERY_OK);
+            return new StatusCode($httpCode, StatusCode::NFTCRYPTOBLOCKER_QUERY_OK);
         }
         if (!isset($headers['x_rate_limit_remaining']) || !isset($headers['x_rate_limit_limit']) || !isset($headers['x_rate_limit_reset'])) {
             return new StatusCode(200, 0);
@@ -41,7 +41,7 @@ class Core {
         if ($headers['x_rate_limit_remaining'] == 0) {
             $apiPath = $connection->getLastApiPath();
             error_log("Reached rate limit zero. API path was: $apiPath");           
-            return new StatusCode(200, StatusCode::NFTARTISTBLOCKER_RATE_LIMIT_ZERO);
+            return new StatusCode(200, StatusCode::NFTCRYPTOBLOCKER_RATE_LIMIT_ZERO);
         }
         return new StatusCode(200, 0);
     }
@@ -80,7 +80,7 @@ class Core {
             $friendships = $connection->get("friendships/lookup", ['user_id' => $paramString]);
             CoreDB::updateTwitterEndpointLogs("friendships/lookup", 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                 return null;
             }
             foreach ($friendships as $friendship) {
@@ -128,7 +128,7 @@ class Core {
             $friendships = $connection->get("friendships/lookup", ['user_id' => $paramString]);
             CoreDB::updateTwitterEndpointLogs("friendships/lookup", 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                 return null;
             }
             foreach ($friendships as $friendship) {
@@ -178,7 +178,7 @@ class Core {
             CoreDB::updateTwitterEndpointLogs("mutes/users/ids", 1);
         }
         $statusCode = Core::checkResponseHeadersForErrors($connection, $userTwitterID);
-        if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+        if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
             return;
         }
         $insertQuery = "INSERT IGNORE INTO userinitialblockrecords (subjectusertwitterid,objectusertwitterid,operation)"
@@ -487,7 +487,7 @@ class Core {
                 $response = $connection->post($endpoint, $params);
                 CoreDB::updateTwitterEndpointLogs($endpoint, 1);
                 $statusCode = Core::checkResponseHeadersForErrors($connection, $userTwitterID);
-                if ($statusCode->httpCode !== StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode !== StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+                if ($statusCode->httpCode !== StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode !== StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                     $objectUserTwitterID = $row['objectusertwitterid'];
                     if ($statusCode->twitterCode === StatusCode::TWITTER_USER_NOT_FOUND) {
                         error_log("User with ID $objectUserTwitterID not found - cannot process entry, deleting.");

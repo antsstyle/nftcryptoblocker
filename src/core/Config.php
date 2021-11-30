@@ -1,14 +1,14 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker\Core;
+namespace Antsstyle\NFTCryptoBlocker\Core;
 
 class Config {
 
-    const LAST_BLOCKLIST_UPDATE_CHECK = "nftartistblocker.lastblocklistupdatecheck";
-    const FOLLOWER_CHECK_TIME_INTERVAL_SECONDS = "nftartistblocker.followerchecktimeintervalseconds";
+    const LAST_BLOCKLIST_UPDATE_CHECK = "nftcryptoblocker.lastblocklistupdatecheck";
+    const FOLLOWER_CHECK_TIME_INTERVAL_SECONDS = "nftcryptoblocker.followerchecktimeintervalseconds";
     
-    const HOMEPAGE_URL = "https://antsstyle.com/nftartistblocker/";
-    const SETTINGSPAGE_URL = "https://antsstyle.com/nftartistblocker/settings";
+    const HOMEPAGE_URL = "https://antsstyle.com/nftcryptoblocker/";
+    const SETTINGSPAGE_URL = "https://antsstyle.com/nftcryptoblocker/settings";
     const ADMIN_URL = "https://twitter.com/antsstyle";
     const ADMIN_NAME = "@antsstyle";
 

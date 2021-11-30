@@ -1,11 +1,11 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker\Core;
+namespace Antsstyle\NFTCryptoBlocker\Core;
 
-use Antsstyle\NFTArtistBlocker\Core\StatusCode;
-use Antsstyle\NFTArtistBlocker\Credentials\AdminUserAuth;
-use Antsstyle\NFTArtistBlocker\Credentials\APIKeys;
-use Antsstyle\NFTArtistBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\StatusCode;
+use Antsstyle\NFTCryptoBlocker\Credentials\AdminUserAuth;
+use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
+use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 use Abraham\TwitterOAuth\TwitterOAuth;
 
 class TwitterTweets {
@@ -30,7 +30,7 @@ class TwitterTweets {
             CoreDB::updateTwitterEndpointLogs("tweets/search/recent", 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection);
             if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK
-                    || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+                    || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
             }
             $tweets = $response->data;

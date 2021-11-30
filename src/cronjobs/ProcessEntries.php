@@ -1,6 +1,6 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker\Cronjobs;
+namespace Antsstyle\NFTCryptoBlocker\Cronjobs;
 
 chdir(dirname(__DIR__, 2));
 
@@ -8,6 +8,6 @@ $dir = getcwd();
 
 require $dir . '/vendor/autoload.php';
 
-use Antsstyle\NFTArtistBlocker\Core\Core;
+use Antsstyle\NFTCryptoBlocker\Core\Core;
 
 Core::processEntriesForAllUsers();

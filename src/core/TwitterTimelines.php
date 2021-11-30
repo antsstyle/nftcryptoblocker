@@ -1,12 +1,12 @@
 <?php
 
-namespace Antsstyle\NFTArtistBlocker\Core;
+namespace Antsstyle\NFTCryptoBlocker\Core;
 
-use Antsstyle\NFTArtistBlocker\Credentials\AdminUserAuth;
-use Antsstyle\NFTArtistBlocker\Credentials\APIKeys;
+use Antsstyle\NFTCryptoBlocker\Credentials\AdminUserAuth;
+use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
 use Abraham\TwitterOAuth\TwitterOAuth;
-use Antsstyle\NFTArtistBlocker\Core\Core;
-use Antsstyle\NFTArtistBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\Core;
+use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 
 class TwitterTimelines {
 
@@ -79,7 +79,7 @@ class TwitterTimelines {
             CoreDB::updateTwitterEndpointLogs("statuses/home_timeline", 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
             if ($statusCode->httpCode !== StatusCode::HTTP_QUERY_OK
-                    || $statusCode->twitterCode !== StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+                    || $statusCode->twitterCode !== StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
             }
             $tweetCount = count($tweets);
@@ -211,7 +211,7 @@ class TwitterTimelines {
             CoreDB::updateTwitterEndpointLogs("users/:id/mentions", 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
             if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK
-                    || $statusCode->twitterCode != StatusCode::NFTARTISTBLOCKER_QUERY_OK) {
+                    || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
             }
             if (!isset($response->data)) {

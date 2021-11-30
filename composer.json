@@ -4,9 +4,9 @@
     },
     "autoload": {
 		"psr-4": {
-			"Antsstyle\\NFTArtistBlocker\\Core\\": "src/core/",
-			"Antsstyle\\NFTArtistBlocker\\Credentials\\": "src/credentials/",
-			"Antsstyle\\NFTArtistBlocker\\Cronjobs\\": "src/cronjobs/"
+			"Antsstyle\\NFTCryptoBlocker\\Core\\": "src/core/",
+			"Antsstyle\\NFTCryptoBlocker\\Credentials\\": "src/credentials/",
+			"Antsstyle\\NFTCryptoBlocker\\Cronjobs\\": "src/cronjobs/"
 		}
 	}
 }

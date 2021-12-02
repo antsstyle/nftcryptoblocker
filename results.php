@@ -35,7 +35,7 @@ $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
         $request_token['oauth_token'], $request_token['oauth_token_secret']);
 try {
     $access_token = $connection->oauth("oauth/access_token", ["oauth_verifier" => $requestOAuthVerifier]);
-} catch (Exception $e) {
+} catch (\Exception $e) {
     error_log("Could not get access token");
     error_log(print_r($e, true));
     $location = Config::HOMEPAGE_URL . "failure";

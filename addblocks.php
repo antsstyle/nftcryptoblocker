@@ -1,13 +1,14 @@
 <?php
 require __DIR__ . '/vendor/autoload.php';
 
+use Antsstyle\NFTCryptoBlocker\Core\Core;
 use Antsstyle\NFTCryptoBlocker\Core\Session;
 use Antsstyle\NFTCryptoBlocker\Core\Config;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 
 Session::checkSession();
 
-$blockListNames = CoreDB::getBlockListNames();
+$blockLists = CoreDB::getBlockLists();
 $userTwitterID = $_SESSION['usertwitterid'];
 
 if (!$_SESSION['usertwitterid']) {
@@ -29,6 +30,9 @@ if ($userInfo === false) {
 
 $errors = 0;
 $successful = 0;
+foreach ($blockLists as $blockList) {
+    $blockListNames[] = $blockList['name'];
+}
 foreach ($blockListNames as $blockListName) {
     $listToSet = filter_input(INPUT_POST, str_replace(" ", "_", $blockListName), FILTER_SANITIZE_STRING);
     if (!is_null($listToSet)) {
@@ -75,24 +79,29 @@ $automationSavedSuccess = CoreDB::updateUserAutomationSettings($userTwitterID, $
         NFT Artist & Cryptobro Blocker
     </title>
     <body>
-        <?php
-        $homepage = Config::HOMEPAGE_URL;
-        $settingspage = Config::SETTINGSPAGE_URL;
-        $adminURL = Config::ADMIN_URL;
-        $adminName = Config::ADMIN_NAME;
-        if ($successful == 0) {
-            echo "No options were specified. Go to the <a href=$settingspage>settings page</a> to modify your settings.";
-        } else if ($errors == 0) {
-            echo "Block list settings and automation settings saved successfully. If you want to change your settings, you can go back to the <a href=$settingspage>settings page</a>.";
-        } else if ($errors > 0 && $automationSavedSuccess) {
-            echo "Automation settings were saved successfully, but block list settings were not saved successfully."
-            . " $errors errors were encountered. Go back to the <a href=$homepage>homepage</a> to try"
-            . " again, or contact <a href=$adminURL>$adminName</a> on Twitter if the problem persists.";
-        } else {
-            echo "Automation and block list settings were not saved successfully; $errors errors were encountered. "
-            . "Go back to the <a href=$homepage>homepage</a> to try"
-            . " again, or contact <a href=$adminURL>$adminName</a> on Twitter if the problem persists.";
-        }
-        ?>
+        <div class="main">
+            <?php Core::echoSideBar(); ?>
+            <h1>NFT Artist & Cryptobro Blocker</h1>
+            <?php
+            $homepage = Config::HOMEPAGE_URL;
+            $settingspage = Config::SETTINGSPAGE_URL;
+            $adminURL = Config::ADMIN_URL;
+            $adminName = Config::ADMIN_NAME;
+            if ($successful == 0) {
+                echo "No options were specified. Go to the settings page to modify your settings.";
+            } else if ($errors == 0) {
+                echo "Block list settings and automation settings saved successfully. If you want to change your settings, you can go back to the settings page.";
+            } else if ($errors > 0 && $automationSavedSuccess) {
+                echo "Automation settings were saved successfully, but block list settings were not saved successfully."
+                . " $errors errors were encountered. Go back to the homepage to try"
+                . " again, or contact <a href=$adminURL>$adminName</a> on Twitter if the problem persists.";
+            } else {
+                echo "Automation and block list settings were not saved successfully; $errors errors were encountered. "
+                . "Go back to the homepage to try"
+                . " again, or contact <a href=$adminURL>$adminName</a> on Twitter if the problem persists.";
+            }
+            ?>
+        </div>
     </body>
+    <script src="Collapsibles.js"></script>
 </html>

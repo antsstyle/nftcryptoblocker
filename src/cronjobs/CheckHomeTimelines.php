@@ -2,6 +2,8 @@
 
 namespace Antsstyle\NFTCryptoBlocker\Cronjobs;
 
+set_time_limit(600);
+
 chdir(dirname(__DIR__, 2));
 
 $dir = getcwd();

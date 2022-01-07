@@ -58,11 +58,28 @@ class CoreDB {
             error_log("Could not delete user follower cache, returning.");
             return;
         }
-        $insertQuery = "INSERT INTO userfollowerscache (usertwitterid,recentfollowerid) VALUES ";
+
+        $selectQuery = "SELECT MAX(id) AS maxid FROM userfollowerscache";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute();
+        if (!$success) {
+            error_log("Could not get max id from user followers cache, returning.");
+            return;
+        }
+        $maxID = $selectStmt->fetchColumn();
+        if (is_null($maxID)) {
+            $maxID = 0;
+        } else {
+            $maxID++;
+        }
+
+        $insertQuery = "INSERT INTO userfollowerscache (id,usertwitterid,recentfollowerid) VALUES ";
         foreach ($followerIDs as $followerID) {
-            $insertQuery .= "(?,?),";
+            $insertQuery .= "(?,?,?),";
+            $insertParams[] = $maxID;
             $insertParams[] = $userTwitterID;
             $insertParams[] = $followerID;
+            $maxID++;
         }
         $insertQuery = substr($insertQuery, 0, -1);
         $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
@@ -515,8 +532,8 @@ class CoreDB {
         if (count($centralBlockListParams) == 0) {
             return;
         }
-        $insertQuery = "INSERT IGNORE INTO centralisedblocklist (blockableusertwitterid, matchedfiltertype, matchedfiltercontent, addedfrom) "
-                . "VALUES (?,?,?,?)";
+        $insertQuery = "INSERT INTO centralisedblocklist (blockableusertwitterid, matchedfiltertype, matchedfiltercontent, addedfrom) "
+                . "VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE blockableusertwitterid=?";
         self::$databaseConnection->beginTransaction();
         foreach ($centralBlockListParams as $singleUserParams) {
             $insertStmt = self::$databaseConnection->prepare($insertQuery);
@@ -539,18 +556,30 @@ class CoreDB {
         return $success;
     }
 
-    public static function getBlockListNames() {
-        $selectQuery = "SELECT name FROM blocklists";
+    public static function updateUserBlockRecords($recordRows) {
+        $insertQuery = "INSERT INTO userblockrecords (subjectusertwitterid, blocklistid, objectusertwitterid, operation, matchedfiltertype, matchedfiltercontent, "
+                . "dateprocessed, addedfrom) VALUES (?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE operation=?, matchedfiltertype=?, matchedfiltercontent=?";
+        $dateProcessed = date('Y-m-d H:i:s');
+        self::$databaseConnection->beginTransaction();
+        foreach ($recordRows as $row) {
+            $insertStmt = self::$databaseConnection->prepare($insertQuery);
+            $insertStmt->execute([$row['subjectusertwitterid'], $row['blocklistid'], $row['objectusertwitterid'], $row['operation'], $row['matchedfiltertype'], 
+                $row['matchedfiltercontent'], $dateProcessed, $row['addedfrom'], $row['operation'], $row['matchedfiltertype'], 
+                $row['matchedfiltercontent']]);
+        }
+        self::$databaseConnection->commit();
+    }
+
+    public static function getBlockLists() {
+        $selectQuery = "SELECT * FROM blocklists";
         $selectStmt = self::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute();
         if (!$success) {
             error_log("Could not get list of users to process entries for, terminating.");
             return;
         }
-        while ($row = $selectStmt->fetch()) {
-            $blockListNames[] = $row['name'];
-        }
-        return $blockListNames;
+        $rows = $selectStmt->fetchAll();
+        return $rows;
     }
 
     public static function initialiseConnection() {

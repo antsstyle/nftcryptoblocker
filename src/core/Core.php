@@ -18,17 +18,18 @@ class Core {
                 $error = $requestBody->errors[0];
                 $errorCode = $error->code;
                 if ($errorCode == StatusCode::TWITTER_INVALID_ACCESS_TOKEN) {
-                    error_log("Deleting user, invalid access token.");
+                    error_log("Deleting user with twitter ID: $userTwitterID, invalid access token.");
                     CoreDB::deleteUser($userTwitterID);
                 }
                 if ($errorCode == StatusCode::TWITTER_USER_ACCOUNT_LOCKED) {
                     CoreDB::setUserLocked("Y", $userTwitterID);
                 }
                 if ($httpCode == StatusCode::HTTP_TOO_MANY_REQUESTS) {
-                    error_log("Warning: rate limits exceeded, received error 429!");
+                    error_log("Warning: rate limits exceeded, received error 429! User ID: $userTwitterID");
                 }
                 if (!(($httpCode >= 500 && $httpCode <= 599) || ($httpCode >= 200 && $httpCode <= 299))) {
-                    error_log("Response headers contained HTTP code: $httpCode, error code: $errorCode. Response body was:");
+                    error_log("Response headers contained HTTP code: $httpCode, error code: $errorCode, user twitter ID: $userTwitterID. "
+                            . "Response body was:");
                     error_log(print_r($connection->getLastBody(), true));
                 }
                 return new StatusCode($httpCode, $errorCode);
@@ -40,10 +41,33 @@ class Core {
         }
         if ($headers['x_rate_limit_remaining'] == 0) {
             $apiPath = $connection->getLastApiPath();
-            error_log("Reached rate limit zero. API path was: $apiPath");           
+            //error_log("Reached rate limit zero. API path was: $apiPath. User ID: $userTwitterID");
             return new StatusCode(200, StatusCode::NFTCRYPTOBLOCKER_RATE_LIMIT_ZERO);
         }
         return new StatusCode(200, 0);
+    }
+
+    public static function echoSidebar() {
+        echo "<div class=\"sidenav\">
+                <button class=\"collapsiblemenuitem\" id=\"mainmenu\"><b>Home</b></button>
+                <div class=\"content\">
+                    <a href=\"https://antsstyle.com/\">About</a>
+                    <a href=\"https://antsstyle.com/apps\">Apps</a>
+                </div>
+                <br/>
+                <button class=\"collapsiblemenuitem\" id=\"artretweetermenu\"><b>ArtRetweeter</b></button>
+                <div class=\"content\">
+                    <a href=\"https://antsstyle.com/artretweeter\">Home</a>
+                    <a href=\"https://antsstyle.com/artretweeter/settings\">Settings</a>
+                    <a href=\"https://antsstyle.com/artretweeter/queuestatus\">Queue Status</a>
+                </div>
+                <br/>
+                <button class=\"collapsiblemenuitem activemenuitem\" id=\"nftcryptoblockermenu\"><b>NFT Artist & Cryptobro Blocker</b></button>
+                <div class=\"content\" style=\"max-height: 100%\">
+                    <a href=\"https://antsstyle.com/nftcryptoblocker/\">Home</a>
+                    <a href=\"https://antsstyle.com/nftcryptoblocker/settings\">Settings</a>
+                </div>
+            </div>";
     }
 
     public static function checkWhitelistForUser($userRow, $potentialIDs) {
@@ -194,7 +218,6 @@ class Core {
 
     // Uses the user object returned for the tweet, not the tweet itself
     public static function checkFiltersForTweetSearch($userObject, $phrases, $urls, $regexes) {
-        error_log(print_r($userObject, true));
         $tweetUserURLs = $userObject->entities->url;
         if (is_array($tweetUserURLs) && count($tweetUserURLs) > 0) {
             $tweetUserURL = $tweetUserURLs[0]->expanded_url;
@@ -247,9 +270,9 @@ class Core {
 
 
         foreach ($urls as $url) {
-            $urlHost = strtolower(parse_url($url['url'], PHP_URL_HOST));
+            $urlHost = strtolower($url['url']);
             if (isset($tweetURLHost) && (strpos((String) $urlHost, (String) $tweetURLHost) !== false)) {
-                return array("filtertype" => "profileurls", "filtercontent" => $url['url']);
+                return array("filtertype" => "urls", "filtercontent" => $url['url']);
             }
         }
 
@@ -266,15 +289,26 @@ class Core {
     }
 
     public static function checkUserFiltersHomeTimeline($tweet, $userInfo, $phrases, $urls, $regexes) {
-        $tweetUserURLs = $tweet->user->entities->url;
+        $tweetURLHosts = [];
+        $tweetUserURLs = $tweet->user->entities->url->urls;
         if (is_array($tweetUserURLs) && count($tweetUserURLs) > 0) {
-            $tweetUserURL = $tweetUserURLs[0]->expanded_url;
-            $tweetUserURL = filter_var($tweetUserURL, FILTER_VALIDATE_URL);
-            if ($tweetUserURL) {
-                $tweetURLHost = strtolower(parse_url($tweetUserURL, PHP_URL_HOST));
+            $userURL = $tweetUserURLs[0]->expanded_url;
+            $userURL = filter_var($userURL, FILTER_VALIDATE_URL);
+            if ($userURL) {
+                $tweetURLHosts[] = strtolower(parse_url($userURL, PHP_URL_HOST));
             }
         }
         $tweetUserDescription = $tweet->user->description;
+        $tweetUserDescriptionURLs = $tweet->user->entities->description->urls;
+        if (is_array($tweetUserDescriptionURLs) && count($tweetUserDescriptionURLs) > 0) {
+            foreach ($tweetUserDescriptionURLs as $descURLObject) {
+                $userURL = $descURLObject->expanded_url;
+                $userURL = filter_var($userURL, FILTER_VALIDATE_URL);
+                if ($userURL) {
+                    $tweetURLHosts[] = strtolower(parse_url($userURL, PHP_URL_HOST));
+                }
+            }
+        }
         $tweetText = $tweet->full_text;
         if (!$tweetText) {
             $tweetText = $tweet->text;
@@ -322,11 +356,13 @@ class Core {
                 return array("operation" => $userInfo['nftprofilepictureoperation'], "filtertype" => "nftprofilepictures", "filtercontent" => null);
             }
         }
-        if ($userInfo['profileurlsoperation'] == "Block" || $userInfo['profileurlsoperation'] == "Mute") {
+        if ($userInfo['urlsoperation'] == "Block" || $userInfo['urlsoperation'] == "Mute") {
             foreach ($urls as $url) {
-                $urlHost = strtolower(parse_url($url['url'], PHP_URL_HOST));
-                if (isset($tweetURLHost) && (strpos((String) $urlHost, (String) $tweetURLHost) !== false)) {
-                    return array("operation" => $userInfo['profileurlsoperation'], "filtertype" => "profileurls", "filtercontent" => $url['url']);
+                $urlHost = strtolower($url['url']);
+                foreach ($tweetURLHosts as $tweetURLHost) {
+                    if (isset($tweetURLHost) && (strpos((String) $urlHost, (String) $tweetURLHost) !== false)) {
+                        return array("operation" => $userInfo['urlsoperation'], "filtertype" => "urls", "filtercontent" => $url['url']);
+                    }
                 }
             }
         }
@@ -343,15 +379,26 @@ class Core {
     }
 
     public static function checkUserFiltersMentionTimeline($mention, $userInfo, $phrases, $urls, $regexes) {
-        $mentionUserURLs = $mention->user->entities->url;
+        $mentionURLHosts = [];
+        $mentionUserURLs = $mention->mention_author->entities->url->urls;
         if (is_array($mentionUserURLs) && count($mentionUserURLs) > 0) {
-            $mentionUserURL = $mentionUserURLs[0]->expanded_url;
-            $mentionUserURL = filter_var($mentionUserURL, FILTER_VALIDATE_URL);
-            if ($mentionUserURL) {
-                $mentionURLHost = strtolower(parse_url($mentionUserURL, PHP_URL_HOST));
+            $userURL = $mentionUserURLs[0]->expanded_url;
+            $userURL = filter_var($userURL, FILTER_VALIDATE_URL);
+            if ($userURL) {
+                $mentionURLHosts[] = strtolower(parse_url($userURL, PHP_URL_HOST));
             }
         }
-        $mentionUserDescription = $mention->user->description;
+        $mentionUserDescription = $mention->mention_author->description;
+        $mentionUserDescriptionURLs = $mention->mention_author->entities->description->urls;
+        if (is_array($mentionUserDescriptionURLs) && count($mentionUserDescriptionURLs) > 0) {
+            foreach ($mentionUserDescriptionURLs as $descURLObject) {
+                $descURL = $descURLObject->expanded_url;
+                $descURL = filter_var($descURL, FILTER_VALIDATE_URL);
+                if ($descURL) {
+                    $mentionURLHosts[] = strtolower(parse_url($descURL, PHP_URL_HOST));
+                }
+            }
+        }
         $mentionTweetText = $mention->full_text;
         if (!$mentionTweetText) {
             $mentionTweetText = $mention->text;
@@ -362,8 +409,8 @@ class Core {
                 $lowerCasePhrase = strtolower($phrase['phrase']);
                 // Check entities instead of text for hashtags and cashtags
                 if (strpos($lowerCasePhrase, "#") === 0) {
-                    if (isset($mention->user->entities->description->hashtags)) {
-                        $hashtagObjects = $mention->user->entities->description->hashtags;
+                    if (isset($mention->mention_author->entities->description->hashtags)) {
+                        $hashtagObjects = $mention->mention_author->entities->description->hashtags;
                         $phraseWithoutHash = substr($lowerCasePhrase, 1);
                         foreach ($hashtagObjects as $hashtagObject) {
                             $hashtag = $hashtagObject->tag;
@@ -375,8 +422,8 @@ class Core {
                         }
                     }
                 } else if (strpos($lowerCasePhrase, "$") === 0) {
-                    if (isset($mention->user->entities->description->cashtags)) {
-                        $cashtagObjects = $mention->user->entities->description->cashtags;
+                    if (isset($mention->mention_author->entities->description->cashtags)) {
+                        $cashtagObjects = $mention->mention_author->entities->description->cashtags;
                         $phraseWithoutHash = substr($lowerCasePhrase, 1);
                         foreach ($cashtagObjects as $cashtagObject) {
                             $cashtag = $cashtagObject->tag;
@@ -394,21 +441,23 @@ class Core {
             }
         }
         if ($userInfo['nftprofilepictureoperation'] == "Block" || $userInfo['nftprofilepictureoperation'] == "Mute") {
-            if ($mention->user->ext_has_nft_avatar) {
+            if ($mention->mention_author->ext_has_nft_avatar) {
                 return array("operation" => $userInfo['nftprofilepictureoperation'], "filtertype" => "nftprofilepictures", "filtercontent" => null);
             }
         }
-        if ($userInfo['profileurlsoperation'] == "Block" || $userInfo['profileurlsoperation'] == "Mute") {
+        if ($userInfo['urlsoperation'] == "Block" || $userInfo['urlsoperation'] == "Mute") {
             foreach ($urls as $url) {
-                $urlHost = strtolower(parse_url($url['url'], PHP_URL_HOST));
-                if (isset($mentionURLHost) && (strpos((String) $urlHost, (String) $mentionURLHost) !== false)) {
-                    return array("operation" => $userInfo['profileurlsoperation'], "filtertype" => "profileurls", "filtercontent" => $url['url']);
+                $urlHost = strtolower($url['url']);
+                foreach ($mentionURLHosts as $mentionURLHost) {
+                    if (isset($mentionURLHost) && (strpos((String) $urlHost, (String) $mentionURLHost) !== false)) {
+                        return array("operation" => $userInfo['urlsoperation'], "filtertype" => "profileurls", "filtercontent" => $url['url']);
+                    }
                 }
             }
         }
         if ($userInfo['cryptousernamesoperation'] == "Block" || $userInfo['cryptousernamesoperation'] == "Mute") {
             foreach ($regexes as $regex) {
-                $userName = strtolower($mention->user->name);
+                $userName = strtolower($mention->mention_author->name);
                 if (preg_match($regex['regex'], $userName)) {
                     return array("operation" => $userInfo['cryptousernamesoperation'], "filtertype" => "cryptousernames",
                         "filtercontent" => $regex['regex']);
@@ -450,6 +499,7 @@ class Core {
         $accessToken = $userRow['accesstoken'];
         $accessTokenSecret = $userRow['accesstokensecret'];
         $deleteParams = [];
+        $recordParams = [];
         $centralBlockListInsertParams = [];
         $operationRows = $selectStmt->fetchAll();
         $friendshipIDsToCheck = [];
@@ -504,13 +554,15 @@ class Core {
                     $deleteParams[] = $row['id'];
                     if ($row['addtocentraldb'] == "Y") {
                         $centralBlockListInsertParams[] = [$row['objectusertwitterid'], $row['matchedfiltertype'], $row['matchedfiltercontent'],
-                            $row['addedfrom']];
+                            $row['addedfrom'], $row['objectusertwitterid']];
                     }
+                    $recordParams[] = $row;
                 }
             }
         }
         CoreDB::deleteProcessedEntries($deleteParams);
         CoreDB::insertCentralBlockListEntries($centralBlockListInsertParams);
+        CoreDB::updateUserBlockRecords($recordParams);
     }
 
 }

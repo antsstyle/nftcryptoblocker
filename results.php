@@ -40,6 +40,7 @@ try {
     error_log(print_r($e, true));
     $location = Config::HOMEPAGE_URL . "failure";
     header("Location: $location", true, 302);
+    exit();
 }
 
 if (isset($access_token)) {

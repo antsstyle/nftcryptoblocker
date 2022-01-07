@@ -40,7 +40,7 @@ class TwitterTweets {
             }
             $userInfo['matchingphraseoperation'] = "Block";
             $userInfo['nftprofilepictureoperation'] = "Block";
-            $userInfo['profileurlsoperation'] = "Block";
+            $userInfo['urlsoperation'] = "Block";
             $userInfo['cryptousernamesoperation'] = "Block";
             $tweetCount = count($tweets);
             error_log("Tweet count: $tweetCount");
@@ -49,7 +49,7 @@ class TwitterTweets {
                 $filtersMatched = Core::checkFiltersForTweetSearch($user, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
                     $updateParams[] = [$user->id, $filtersMatched['filtertype'],
-                        $filtersMatched['filtercontent'], "tweets/search"];
+                        $filtersMatched['filtercontent'], "tweets/search", $user->id];
                 }
             }
 

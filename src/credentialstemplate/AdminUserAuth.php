@@ -1,5 +1,7 @@
 <?php
 
+namespace Antsstyle\NFTCryptoBlocker\CredentialsTemplate;
+
 class AdminUserAuth {
 
     const access_token = "<your access token>";

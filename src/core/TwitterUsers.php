@@ -177,7 +177,7 @@ class TwitterUsers {
                 // check description, profile picture: add block to entries to process if match found
                 $filtersMatched = self::checkNFTFilters($userRow, $objectUser, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
-                    error_log("Filters matched! Object user ID: $objectUser->id. Filter was:");
+                    error_log("Filters matched for user follower! Object user ID: $objectUser->id. Filter was:");
                     error_log(print_r($filtersMatched, true));
                     if ($filtersMatched['operation'] == "Block") {
                         $insertParams[] = [$userRow['usertwitterid'], $objectUser->id, "Block", $filtersMatched['filtertype'],
@@ -321,12 +321,12 @@ class TwitterUsers {
                     "filtercontent" => null);
             }
         }
-        if ($subjectUserInfo['profileurlsoperation'] == "Block" || $subjectUserInfo['profileurlsoperation'] == "Mute") {
+        if ($subjectUserInfo['urlsoperation'] == "Block" || $subjectUserInfo['urlsoperation'] == "Mute") {
             foreach ($urls as $url) {
-                $urlHost = strtolower(parse_url($url['url'], PHP_URL_HOST));
+                $urlHost = strtolower($url['url']);
                 foreach ($userURLHosts as $userURLHost) {
                     if (isset($userURLHost) && (strpos((String) $urlHost, (String) $userURLHost) !== false)) {
-                        return array("operation" => $subjectUserInfo['profileurlsoperation'], "filtertype" => "profileurls",
+                        return array("operation" => $subjectUserInfo['urlsoperation'], "filtertype" => "urls",
                             "filtercontent" => $url['url']);
                     }
                 }

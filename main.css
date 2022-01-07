@@ -3,19 +3,94 @@ body {
     font-family: verdana;
     color: #c0c0c0;
     font-size: 14px;
-    max-width: 800px;
+    max-width: 960px;
+}
+
+.collapsible {
+    background-color: #777;
+    color: white;
+    cursor: pointer;
+    padding: 10px;
+    width: 100%;
+    border: none;
+    text-align: left;
+    outline: none;
+    font-size: 15px;
+}
+
+.active, .collapsible:hover {
+    background-color: #555;
+}
+
+.collapsible:after {
+    content: '\02795'; /* Unicode character for "plus" sign (+) */
+    font-size: 13px;
+    color: white;
+    float: right;
+    margin-left: 5px;
+}
+
+.active:after {
+    content: "\2796"; /* Unicode character for "minus" sign (-) */
+}
+
+.collapsible:after {
+    content: '\02795'; /* Unicode character for "plus" sign (+) */
+    font-size: 13px;
+    color: white;
+    float: right;
+    margin-left: 5px;
+}
+
+.active:after {
+    content: "\2796"; /* Unicode character for "minus" sign (-) */
+}
+
+.collapsiblemenuitem {
+    background-color: #252525;
+    color: #c0c0c0;
+    font-size: 16px;
+    font-family: verdana;
+    cursor: pointer;
+    padding: 10px;
+    width: 100%;
+    border: none;
+    text-align: left;
+    outline: none;
+}
+
+.activemenuitem, .collapsiblemenuitem:hover {
+
+}
+
+.collapsiblemenuitem:after {
+    content: '\02795'; /* Unicode character for "plus" sign (+) */
+    float: right;
+    margin-left: 5px;
+}
+
+.activemenuitem:after {
+    content: "\2796"; /* Unicode character for "minus" sign (-) */
+}
+
+.content {
+    padding: 0 10px;
+    max-height: 0;
+    width: 80%;
+    overflow: hidden;
+    transition: max-height 0.2s ease-out;
 }
 
 div.start {
-    
+
 }
 
 div.mid {
-    
+
 }
 
 div.end {
-    
+
 }
 
 div.formsection {
@@ -71,8 +146,169 @@ a:hover {
 }
 
 input[type=submit] {
-  padding: 10px 24px;
-  margin: 4px 2px;
-  font-weight: bold;
-  cursor: pointer;
+    padding: 10px 24px;
+    margin: 4px 2px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+/* The sidebar menu */
+.sidenav {
+    height: 100%; /* Full-height: remove this if you want "auto" height */
+    width: 240px; /* Set the width of the sidebar */
+    position: fixed; /* Fixed Sidebar (stay in place on scroll) */
+    z-index: 1; /* Stay on top */
+    top: 0; /* Stay at the top */
+    left: 0;
+    overflow-x: hidden; /* Disable horizontal scroll */
+    padding-top: 20px;
+    border-right-style: solid;
+    border-color: white;
+}
+
+/* The navigation menu links */
+.sidenav a {
+    padding: 6px 8px 6px 16px;
+    text-decoration: none;
+    font-size: 20px;
+    display: block;
+}
+
+/* When you mouse over the navigation links, change their color */
+.sidenav a:hover {
+    color: #f1f1f1;
+}
+
+/* Style page content */
+.main {
+    margin-left: 240px; /* Same as the width of the sidebar */
+    padding: 0px 10px;
+}
+
+/* On smaller screens, change the style of the sidebar (less padding and a smaller font size) */
+@media screen and (max-width: 600px) {
+    .sidenav {
+        padding-top: 15px;
+        width: 150px;
+    }
+    .sidenav a {
+        font-size: 14px;
+    }
+    .main {
+        margin-left: 150px;
+    }
+}
+
+div.container {
+    height: 60px;
+    position: relative;
+    width: 80%;
+}
+
+div.center {
+    margin: 0;
+    position: absolute;
+    width: 10%;
+    top: 50%;
+    left: 50%;
+    -ms-transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%);
+}
+
+div.errormsg {
+    padding-top: 3px;
+    padding-bottom: 3px;
+    color: #ff4d4d;
+}
+
+div.queuedtweet {
+    border-style: solid;
+    border-color: blue;
+}
+
+div.reschedulequeuedentrydiv {
+    height: 0;
+    padding: 0;
+    overflow: hidden;
+    transition: all 0.3s linear;
+}
+
+div.reschedulequeuedentrydiv.transition {
+    padding: 0;
+    height: 60px;
+    transition: all 0.3s linear;
+}
+
+div.deletequeueentrydiv {
+    height: 0;
+    overflow: hidden;
+    transition: all 0.3s linear;
+}
+
+div.deletequeueentrydiv.transition {
+    height: 25px;
+    transition: all 0.3s linear;
+}
+
+button.reschedulebutton {
+    margin-left: 5px;
+}
+
+button.deletequeueentrybutton {
+
+}
+
+input[type=date].rescheduledate {
+    margin-top: 5px;
+    margin-bottom: 5px;
+    margin-right: 5px;
+}
+
+div.operationresult {
+
+}
+
+div.rescheduleresultdiv {
+    padding: 0;
+    height: 0;
+    overflow: hidden;
+    transition: all 0.3s linear;
+}
+
+div.rescheduleresultdiv.transition {
+    padding: 0;
+    height: 16px;
+    transition: all 0.3s linear;
+}
+
+div.retweettime {
+    padding: 0;
+    margin: 0;
+    display: inline;
+}
+
+div.deleteresultdiv {
+    padding: 0;
+    height: 0;
+    overflow: hidden;
+    transition: all 0.3s linear;
+}
+
+div.deleteresultdiv.transition {
+    padding: 0;
+    height: 16px;
+    transition: all 0.3s linear;
+}
+
+div.disableautomationwarningdiv {
+    padding: 0;
+    height: 0;
+    overflow: hidden;
+    transition: all 0.3s linear;
+}
+
+div.disableautomationwarningdiv.transition {
+    padding: 0;
+    height: 16px;
+    transition: all 0.3s linear;
 }

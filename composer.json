@@ -1,6 +1,7 @@
 {
     "require": {
-        "abraham/twitteroauth": "^3.1"
+        "abraham/twitteroauth": "^3.1",
+        "monolog/monolog": "^2.3"
     },
     "autoload": {
 		"psr-4": {

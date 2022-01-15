@@ -7,8 +7,11 @@ use Antsstyle\NFTCryptoBlocker\Credentials\AdminUserAuth;
 use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 use Abraham\TwitterOAuth\TwitterOAuth;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 class TwitterTweets {
+    
+    public static $logger;
 
     public static function testTweetSearch($query) {
         $params['query'] = $query;
@@ -43,7 +46,7 @@ class TwitterTweets {
             $userInfo['urlsoperation'] = "Block";
             $userInfo['cryptousernamesoperation'] = "Block";
             $tweetCount = count($tweets);
-            error_log("Tweet count: $tweetCount");
+            TwitterTweets::$logger->info("Tweet count: $tweetCount");
             for ($i = 0; $i < $tweetCount; $i++) {
                 $user = $users[$i];
                 $filtersMatched = Core::checkFiltersForTweetSearch($user, $phrases, $urls, $regexes);
@@ -68,3 +71,5 @@ class TwitterTweets {
     }
 
 }
+
+TwitterTweets::$logger = LogManager::getLogger("TwitterTweets");

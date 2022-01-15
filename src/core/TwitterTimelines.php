@@ -6,8 +6,11 @@ use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
 use Abraham\TwitterOAuth\TwitterOAuth;
 use Antsstyle\NFTCryptoBlocker\Core\Core;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 class TwitterTimelines {
+    
+    public static $logger;
 
     public static function checkHomeTimelineForAllUsers() {
         $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid"
@@ -15,14 +18,14 @@ class TwitterTimelines {
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute(["N"]);
         if (!$success) {
-            error_log("Could not get users to retrieve all home timeline entries for, returning.");
+            TwitterTimelines::$logger->critical("Could not get users to retrieve all home timeline entries for, returning.");
             return;
         }
         $phrases = CoreDB::getBlockablePhrases();
         $urls = CoreDB::getBlockableURLs();
         $regexes = CoreDB::getBlockableUsernameRegexes();
         if (!$phrases || !$urls || !$regexes) {
-            error_log("Could not retrieve filters for user mentions, returning.");
+            TwitterTimelines::$logger->critical("Could not retrieve filters for user mentions, returning.");
             return;
         }
         while ($userRow = $selectStmt->fetch()) {
@@ -51,11 +54,17 @@ class TwitterTimelines {
         $connection->setRetries(1, 1);
         $tweetCount = 1;
         $endReached = false;
-        while ($tweetCount > 0) {
+        $invocationCount = 0;
+        while ($tweetCount > 0 && $invocationCount < 14) {
             $tweets = $connection->get("statuses/home_timeline", $params);
             CoreDB::updateTwitterEndpointLogs("statuses/home_timeline", 1);
+            $invocationCount++;
             $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
             if ($statusCode->httpCode !== StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode !== StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+                if ($statusCode->httpCode === 429) {
+                    TwitterTimelines::$logger->critical("Rate limit exceeded in home timeline! "
+                            . "Invocation count upon rate limit exceeded was: $invocationCount");
+                }
                 break;
             }
             $tweetCount = count($tweets);
@@ -86,10 +95,10 @@ class TwitterTimelines {
                 }
                 $filtersMatched = Core::checkUserFiltersHomeTimeline($tweet, $userRow, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
-                    error_log("Filters matched for home timeline, filters array:");
-                    error_log(print_r($filtersMatched, true));
+                    TwitterTimelines::$logger->info("Filters matched for home timeline, filters array:");
+                    TwitterTimelines::$logger->info(print_r($filtersMatched, true));
                     $userID = $tweet->user->id;
-                    error_log("Filters matched for home timeline, object user ID: $userID");
+                    TwitterTimelines::$logger->info("Filters matched for home timeline, object user ID: $userID");
                     if ($filtersMatched['operation'] == "Block") {
                         $insertParams[] = [$userRow['usertwitterid'], $tweet->user->id, "Block", $filtersMatched['filtertype'],
                             $filtersMatched['filtercontent'], "Y", "statuses/home_timeline"];
@@ -98,7 +107,7 @@ class TwitterTimelines {
                             $filtersMatched['filtercontent'], "Y", "statuses/home_timeline"];
                     } else {
                         $userOp = $filtersMatched['operation'];
-                        error_log("Unrecognised user automation operation, text was: $userOp");
+                        TwitterTimelines::$logger->error("Unrecognised user automation operation, text was: $userOp");
                     }
                 }
                 $tweetID = $tweet->id;
@@ -148,14 +157,14 @@ class TwitterTimelines {
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute(["N"]);
         if (!$success) {
-            error_log("Could not get users to retrieve all mentions for, returning.");
+            TwitterTimelines::$logger->critical("Could not get users to retrieve all mentions for, returning.");
             return;
         }
         $phrases = CoreDB::getBlockablePhrases();
         $urls = CoreDB::getBlockableURLs();
         $regexes = CoreDB::getBlockableUsernameRegexes();
         if (!$phrases || !$urls || !$regexes) {
-            error_log("Could not retrieve filters for user mentions, returning.");
+            TwitterTimelines::$logger->critical("Could not retrieve filters for user mentions, returning.");
             return;
         }
         while ($userRow = $selectStmt->fetch()) {
@@ -216,7 +225,7 @@ class TwitterTimelines {
                 }
                 $authorID = $mention->author_id;
                 if (!array_key_exists($authorID, $includesUsersMap)) {
-                    error_log("Warning: author ID $authorID wasn't found in the includes users map.");
+                    TwitterTimelines::$logger->error("Author ID $authorID wasn't found in the includes users map.");
                     $tweetID = $mention->id;
                     if ($tweetID > $highestSinceID) {
                         $highestSinceID = $tweetID;
@@ -227,10 +236,10 @@ class TwitterTimelines {
                 // check description, profile picture: add block to entries to process if match found
                 $filtersMatched = Core::checkUserFiltersMentionTimeline($mention, $userRow, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
-                    error_log("Filters matched for mentions timeline, filters array:");
-                    error_log(print_r($filtersMatched, true));
+                    TwitterTimelines::$logger->info("Filters matched for mentions timeline, filters array:");
+                    TwitterTimelines::$logger->info(print_r($filtersMatched, true));
                     $mentionAuthorID = $mention->author_id;
-                    error_log("Filters matched for mentions timeline, object user ID: $mentionAuthorID");
+                    TwitterTimelines::$logger->info("Filters matched for mentions timeline, object user ID: $mentionAuthorID");
                     if ($filtersMatched['operation'] == "Block") {
                         $insertParams[] = [$userRow['usertwitterid'], $mentionAuthorID, "Block", $filtersMatched['filtertype'],
                             $filtersMatched['filtercontent'], "Y", "users/:id/mentions"];
@@ -241,7 +250,7 @@ class TwitterTimelines {
                         // Add to entries to process along with reason information
                     } else {
                         $userOp = $filtersMatched['operation'];
-                        error_log("Unrecognised user automation operation, text was: $userOp");
+                        TwitterTimelines::$logger->error("Unrecognised user automation operation, text was: $userOp");
                     }
                 }
                 $tweetID = $mention->id;
@@ -292,3 +301,5 @@ class TwitterTimelines {
     }
 
 }
+
+TwitterTimelines::$logger = LogManager::getLogger("TwitterTimelines");

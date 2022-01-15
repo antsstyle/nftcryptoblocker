@@ -12,4 +12,4 @@ require $dir . '/vendor/autoload.php';
 
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 
-CoreDB::checkCentralisedBlockListForAllUsers();
+CoreDB::checkCentralisedBlockListForUsers();

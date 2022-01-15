@@ -1,6 +1,5 @@
 <?php
 require __DIR__ . '/vendor/autoload.php';
-;
 
 use Antsstyle\NFTCryptoBlocker\Core\Core;
 use Antsstyle\NFTCryptoBlocker\Core\Config;

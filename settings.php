@@ -7,7 +7,6 @@ require __DIR__ . '/vendor/autoload.php';
 use Antsstyle\NFTCryptoBlocker\Core\Core;
 use Antsstyle\NFTCryptoBlocker\Core\Config;
 use Antsstyle\NFTCryptoBlocker\Core\Session;
-use Antsstyle\NFTCryptoBlocker\Core\Config;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 
 Session::checkSession();
@@ -38,6 +37,7 @@ if ($userInfo === false) {
 $blockLists = CoreDB::getBlockLists();
 $blockablePhrases = CoreDB::getBlockablePhrases();
 $blockableURLs = CoreDB::getBlockableURLs();
+$centralDBCount = CoreDB::getCentralDBCount();
 $blockableURLsPage = Config::HOMEPAGE_URL . "blockableurls";
 $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
 ?>
@@ -79,9 +79,9 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
                     $blockListName = $blockList['name'];
                     $blockListURL = $blockList['url'];
                     if (is_null($blockListURL)) {
-                        echo "<b>List \"$blockListName\":</b><br/><br/>";
+                        echo "<b>$blockListName:</b><br/><br/>";
                     } else {
-                        echo "<b>List \"$blockListName\":</b> <a href=\"$blockListURL\" target=\"_blank\">(list)</a><br/><br/>";
+                        echo "<b>$blockListName:</b> <a href=\"$blockListURL\" target=\"_blank\">(list)</a><br/><br/>";
                     }
                     echo "<div class=\"formsection\" style=\"max-width:480px;\">";
                     echo "<input type=\"radio\" id=\"block $blockListName\" name=\"$blockListName\" value=\"block_$blockListName\">";
@@ -93,12 +93,12 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
                     echo "<input type=\"radio\" id=\"unmute $blockListName\" name=\"$blockListName\" value=\"unmute_$blockListName\">";
                     echo "<label for=\"unmute $blockListName\"> Unmute </label>";
                     echo "<input type=\"radio\" id=\"noaction $blockListName\" name=\"$blockListName\" value=\"noaction_$blockListName\" checked=\"checked\">";
-                    echo "<label for=\"noaction $blockListName\"> Do nothing </label></div>";
+                    echo "<label for=\"noaction $blockListName\"> Do nothing </label></div><br/>";
                 }
                 echo "<h2>Auto-block and auto-mute options</h2>";
                 echo "The options below will scan tweets that mention you and tweets which appear in your timeline, and block or mute"
                 . " the user who posted that tweet depending on which option you select.<br/><br/>";
-                echo "<b>Tweets containing certain phrases:</b> <a href=\"$blockablePhrasesPage\" target=\"_blank\">"
+                echo "<b>Tweets containing crypto/NFT related phrases:</b> <a href=\"$blockablePhrasesPage\" target=\"_blank\">"
                 . "(list of phrases)</a>";
                 echo "<br/><br/><div class=\"formsection\">";
                 echo "<input type=\"radio\" id=\"block phrases\" name=\"phrases\" value=\"block_phrases\">";
@@ -107,7 +107,7 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
                 echo "<label for=\"mute phrases\"> Mute </label>";
                 echo "<input type=\"radio\" id=\"noaction phrases\" name=\"phrases\" value=\"noaction_phrases\" checked=\"checked\">";
                 echo "<label for=\"noaction phrases\"> Do nothing </label></div><br/><br/>";
-                echo "<b>Tweets containing certain URLs, or users with those URLs in their profile:</b> "
+                echo "<b>Tweets containing crypto/NFT URLs, or users with those URLs in their profile:</b> "
                 . "<a href=\"$blockableURLsPage\" target=\"_blank\">(list of URLs)</a>";
 
                 echo "<br/><br/><div class=\"formsection\">";
@@ -156,6 +156,8 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
                 . "If you enable this option, you can block or mute all users in that database. It will only do this for central"
                 . " database entries that match filters you have chosen to block or mute above."
                 . "<br/><br/>"
+                . "There are currently <b>$centralDBCount</b> crypto/NFT users in the central database. If you enable this option, the app will also action"
+                        . " future database entries for you.<br/><br/>"
                 . "<div class=\"formsection\">";
                 echo "<input type=\"radio\" id=\"block centraldatabase\" name=\"centraldatabase\" value=\"block_centraldatabase\">";
                 echo "<label for=\"block centraldatabase\"> Block </label>";

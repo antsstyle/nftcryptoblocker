@@ -8,14 +8,17 @@ use Antsstyle\NFTCryptoBlocker\Credentials\AdminUserAuth;
 use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 use Abraham\TwitterOAuth\TwitterOAuth;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 class TwitterUsers {
+    
+    public static $logger;
 
     public static function testUserSearch($query) {
         $endpoint = "users/search";
         $params['count'] = 20;
         $params['q'] = $query;
-        error_log("Query parameter: $query");
+        TwitterUsers::$logger->info("Query parameter: $query");
         $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
                 AdminUserAuth::access_token, AdminUserAuth::access_token_secret);
         $connection->setRetries(1, 1);
@@ -36,7 +39,7 @@ class TwitterUsers {
         $urls = CoreDB::getBlockableURLs();
         $regexes = CoreDB::getBlockableUsernameRegexes();
         if (!$phrases || !$urls || !$regexes) {
-            error_log("Could not retrieve filters for user mentions, returning.");
+            TwitterUsers::$logger->critical("Could not retrieve filters for user mentions, returning.");
             return;
         }
         foreach ($phrases as $phrase) {
@@ -67,8 +70,8 @@ class TwitterUsers {
             foreach ($response as $userObject) {
                 $filtersMatched = self::checkNFTFilters($subjectUserInfo, $userObject, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
-                    error_log("Filters matched for users/search! Object user ID: $userObject->id. Filter was:");
-                    error_log(print_r($filtersMatched, true));
+                    TwitterUsers::$logger->info("Filters matched for users/search! Object user ID: $userObject->id. Filter was:");
+                    TwitterUsers::$logger->info(print_r($filtersMatched, true));
 
                     $insertParams[] = [$userObject->id, $filtersMatched['filtertype'],
                         $filtersMatched['filtercontent'], "users/search"];
@@ -101,7 +104,7 @@ class TwitterUsers {
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute([Config::FOLLOWER_CHECK_TIME_INTERVAL_SECONDS]);
         if (!$success) {
-            error_log("Could not get users to check NFT followers for, returning.");
+            TwitterUsers::$logger->critical("Could not get users to check NFT followers for, returning.");
             return;
         }
         $timeIntervalSeconds = $selectStmt->fetchColumn();
@@ -117,14 +120,14 @@ class TwitterUsers {
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute(["Block", "Mute", "N", $dateThreshold, "N"]);
         if (!$success) {
-            error_log("Could not get users to check NFT followers for, returning.");
+            TwitterUsers::$logger->critical("Could not get users to check NFT followers for, returning.");
             return;
         }
         $phrases = CoreDB::getBlockablePhrases();
         $urls = CoreDB::getBlockableURLs();
         $regexes = CoreDB::getBlockableUsernameRegexes();
         if (!$phrases || !$urls || !$regexes) {
-            error_log("Could not retrieve filters for user mentions, returning.");
+            TwitterUsers::$logger->critical("Could not retrieve filters for user mentions, returning.");
             return;
         }
         while ($userRow = $selectStmt->fetch()) {
@@ -177,8 +180,8 @@ class TwitterUsers {
                 // check description, profile picture: add block to entries to process if match found
                 $filtersMatched = self::checkNFTFilters($userRow, $objectUser, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
-                    error_log("Filters matched for user follower! Object user ID: $objectUser->id. Filter was:");
-                    error_log(print_r($filtersMatched, true));
+                    TwitterUsers::$logger->info("Filters matched for user follower! Object user ID: $objectUser->id. Filter was:");
+                    TwitterUsers::$logger->info(print_r($filtersMatched, true));
                     if ($filtersMatched['operation'] == "Block") {
                         $insertParams[] = [$userRow['usertwitterid'], $objectUser->id, "Block", $filtersMatched['filtertype'],
                             $filtersMatched['filtercontent'], "Y", "users/:id/followers"];
@@ -189,7 +192,7 @@ class TwitterUsers {
                         // Add to entries to process along with reason information
                     } else {
                         $userOp = $filtersMatched['operation'];
-                        error_log("Unrecognised user automation operation, text was: $userOp");
+                        TwitterUsers::$logger->error("Unrecognised user automation operation, text was: $userOp");
                     }
                 }
             }
@@ -206,7 +209,7 @@ class TwitterUsers {
             if ($userRow['followersendreached'] == "Y") {
                 if ($followerCache === false) {
                     $userTwitterID = $userRow['usertwitterid'];
-                    error_log("Follower cache for user ID $userTwitterID could not be retrieved!");
+                    TwitterUsers::$logger->error("Follower cache for user ID $userTwitterID could not be retrieved!");
                     break;
                 }
                 foreach ($returnedFollowerIDs as $returnedFollowerID) {
@@ -345,3 +348,5 @@ class TwitterUsers {
     }
 
 }
+
+TwitterUsers::$logger = LogManager::getLogger("TwitterUsers");

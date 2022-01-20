@@ -3,8 +3,17 @@ function compare(a, b) {
         return Date.parse(a) > Date.parse(b);
     } else if (!Number.isNaN(parseInt(a))) {
         return parseInt(a) > parseInt(b);
-    } 
+    }
     return a.toLowerCase() > b.toLowerCase();
+}
+
+function swapRows(row1, row2) {
+    let count = row1.length;
+    for (let i = 0; i < count; i++) {
+        let temp = row1[i].innerHTML;
+        row1[i].innerHTML = row2[i].innerHTML;
+        row2[i].innerHTML = temp;
+    }
 }
 
 function checkTableSorted(n, tableID) {
@@ -39,24 +48,19 @@ function partition(rows, start, end, n, descorder) {
         let rowValue = rows[i].getElementsByTagName("TD")[n].innerHTML;
         if (descorder) {
             if (compare(rowValue, pivotValue)) {
-                rows[i].getElementsByTagName("TD")[n].innerHTML = rows[pivotIndex].getElementsByTagName("TD")[n].innerHTML;
-                rows[pivotIndex].getElementsByTagName("TD")[n].innerHTML = rowValue;
+                swapRows(rows[i].getElementsByTagName("TD"), rows[pivotIndex].getElementsByTagName("TD"));
                 pivotIndex++;
             }
         } else {
             if (compare(pivotValue, rowValue)) {
-                rows[i].getElementsByTagName("TD")[n].innerHTML = rows[pivotIndex].getElementsByTagName("TD")[n].innerHTML;
-                rows[pivotIndex].getElementsByTagName("TD")[n].innerHTML = rowValue;
+                swapRows(rows[i].getElementsByTagName("TD"), rows[pivotIndex].getElementsByTagName("TD"));
                 pivotIndex++;
             }
         }
 
     }
-    
-    let pivotIndexValue = rows[pivotIndex].getElementsByTagName("TD")[n].innerHTML;
 
-    rows[pivotIndex].getElementsByTagName("TD")[n].innerHTML = rows[end].getElementsByTagName("TD")[n].innerHTML;
-    rows[end].getElementsByTagName("TD")[n].innerHTML = pivotIndexValue;
+    swapRows(rows[pivotIndex].getElementsByTagName("TD"), rows[end].getElementsByTagName("TD"));
     return pivotIndex;
 }
 

@@ -9,7 +9,7 @@ use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 class TwitterTimelines {
-    
+
     public static $logger;
 
     public static function checkHomeTimelineForAllUsers() {
@@ -28,9 +28,11 @@ class TwitterTimelines {
             TwitterTimelines::$logger->critical("Could not retrieve filters for user mentions, returning.");
             return;
         }
+        $invocationCount = 0;
         while ($userRow = $selectStmt->fetch()) {
-            self::checkHomeTimelineForUser($userRow, $phrases, $urls, $regexes);
+            $invocationCount += TwitterTimelines::checkHomeTimelineForUser($userRow, $phrases, $urls, $regexes);
         }
+        CoreDB::updateTwitterEndpointLogs("statuses/home_timeline", $invocationCount);
     }
 
     public static function checkHomeTimelineForUser($userRow, $phrases, $urls, $regexes) {
@@ -51,14 +53,18 @@ class TwitterTimelines {
         $insertParams = [];
         $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
                 $accessToken, $accessTokenSecret);
-        $connection->setRetries(1, 1);
+        $connection->setRetries(0, 0);
         $tweetCount = 1;
         $endReached = false;
         $invocationCount = 0;
         while ($tweetCount > 0 && $invocationCount < 14) {
-            $tweets = $connection->get("statuses/home_timeline", $params);
-            CoreDB::updateTwitterEndpointLogs("statuses/home_timeline", 1);
-            $invocationCount++;
+            try {
+                $tweets = $connection->get("statuses/home_timeline", $params);
+                $invocationCount++;
+            } catch (\Exception $e) {
+                TwitterTimelines::$logger->error("TwitterOAuth failed to get a response: " . print_r($e, true));
+                continue;
+            }
             $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
             if ($statusCode->httpCode !== StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode !== StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                 if ($statusCode->httpCode === 429) {
@@ -127,6 +133,7 @@ class TwitterTimelines {
                 break;
             }
         }
+        CoreDB::$databaseConnection->beginTransaction();
         // Update since_id in DB
         if ($endReached && ($userRow['hometimelineendreached'] == "N")) {
             $updateQuery = "UPDATE users SET hometimelinemaxid=?, hometimelineendreached=? WHERE twitterid=?";
@@ -143,12 +150,13 @@ class TwitterTimelines {
         }
         $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
                 . "matchedfiltertype,matchedfiltercontent,addtocentraldb,addedfrom) VALUES (?,?,?,?,?,?,?)";
-        CoreDB::$databaseConnection->beginTransaction();
+
         foreach ($insertParams as $insertParamsForUser) {
             $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
             $insertStmt->execute($insertParamsForUser);
         }
         CoreDB::$databaseConnection->commit();
+        return $invocationCount;
     }
 
     public static function checkMentionsTimelineForAllUsers() {
@@ -167,9 +175,11 @@ class TwitterTimelines {
             TwitterTimelines::$logger->critical("Could not retrieve filters for user mentions, returning.");
             return;
         }
+        $mentionInvocationCount = 0;
         while ($userRow = $selectStmt->fetch()) {
-            self::checkMentionsTimelineForUser($userRow, $phrases, $urls, $regexes);
+            $mentionInvocationCount += TwitterTimelines::checkMentionsTimelineForUser($userRow, $phrases, $urls, $regexes);
         }
+        CoreDB::updateTwitterEndpointLogs("users/:id/mentions", $mentionInvocationCount);
     }
 
     public static function checkMentionsTimelineForUser($userRow, $phrases, $urls, $regexes) {
@@ -190,13 +200,19 @@ class TwitterTimelines {
         $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
                 $accessToken, $accessTokenSecret);
         $connection->setApiVersion('2');
-        $connection->setRetries(1, 1);
+        $connection->setRetries(0, 0);
         $mentionCount = 1;
         $endReached = false;
+        $endpointInvocationCount = 0;
         while ($mentionCount > 0) {
             $query = "users/" . $userRow['usertwitterid'] . "/mentions";
-            $response = $connection->get($query, $queryParams);
-            CoreDB::updateTwitterEndpointLogs("users/:id/mentions", 1);
+            try {
+                $response = $connection->get($query, $queryParams);
+                $endpointInvocationCount++;
+            } catch (\Exception $e) {
+                TwitterTimelines::$logger->error("TwitterOAuth failed to get a response. " . print_r($e, true));
+                continue;
+            }
             $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
             if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
@@ -272,7 +288,7 @@ class TwitterTimelines {
                 break;
             }
         }
-
+        CoreDB::$databaseConnection->beginTransaction();
         if ($endReached && ($userRow['mentionstimelineendreached'] == "N")) {
             if (!isset($queryParams['pagination_token'])) {
                 $queryParams['pagination_token'] = null;
@@ -289,15 +305,15 @@ class TwitterTimelines {
             $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
             $updateStmt->execute([$highestSinceID, $userRow['usertwitterid']]);
         }
-
         $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
                 . "matchedfiltertype,matchedfiltercontent,addtocentraldb,addedfrom) VALUES (?,?,?,?,?,?,?)";
-        CoreDB::$databaseConnection->beginTransaction();
+
         foreach ($insertParams as $insertParamsForUser) {
             $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
             $insertStmt->execute($insertParamsForUser);
         }
         CoreDB::$databaseConnection->commit();
+        return $endpointInvocationCount;
     }
 
 }

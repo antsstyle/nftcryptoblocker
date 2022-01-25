@@ -18,6 +18,10 @@ body {
     font-size: 15px;
 }
 
+div.halted {
+    color: #cf3a44;
+}
+
 .active, .collapsible:hover {
     background-color: #555;
 }
@@ -311,4 +315,22 @@ div.disableautomationwarningdiv.transition {
     padding: 0;
     height: 16px;
     transition: all 0.3s linear;
+}
+
+.dblisttable {
+    padding: 5px;
+    font-size: 12px;
+}
+
+tr {
+    border: 1px solid blue;
+}
+
+td {
+    border: 1px solid blue;
+    padding: 5px;
+}
+
+th {
+    border: 1px solid blue;
 }

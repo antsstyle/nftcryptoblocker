@@ -1,9 +1,13 @@
 #!/bin/bash
 
-[ "${FLOCKER}" != "$0" ] && exec env FLOCKER="$0" flock -en "$0" "$0" "$@" || :
-    
 cd "$(dirname "$0")"
 
 cd "../"
 
-php cronjobs/CheckCentralisedBlocklist.php
+fileName=$(basename -- "$0")
+tmpDir="$(dirname "$PWD")/tmp/"
+
+mkdir -p ${tmpDir}
+
+lockFile="${tmpDir}${fileName}"
+nohup flock -en ${lockFile} php cronjobs/CheckCentralisedBlocklist.php &

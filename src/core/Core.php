@@ -70,6 +70,7 @@ class Core {
                     <a href=\"https://antsstyle.com/nftcryptoblocker/\">Home</a>
                     <a href=\"https://antsstyle.com/nftcryptoblocker/settings\">Settings</a>
                     <a href=\"https://antsstyle.com/nftcryptoblocker/statistics\">Stats</a>
+                    <a href=\"https://antsstyle.com/nftcryptoblocker/centraldb\">Central DB</a>
                 </div>
             </div>";
     }
@@ -129,7 +130,7 @@ class Core {
             Core::$logger->error("Invalid input supplied to checkFriendshipsForUser - blockIDs was not an array.");
             return null;
         }
-        if (count($blockIDs) == 0) {
+        if (count($blockIDs) === 0) {
             Core::$logger->error("Empty block IDs list!");
             return [];
         }
@@ -157,6 +158,10 @@ class Core {
             CoreDB::updateTwitterEndpointLogs("friendships/lookup", 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
             if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+                Core::$logger->error("Failed to get friendships for user!" . print_r($friendships, true));
+                Core::$logger->error("Param string: $paramString");
+                Core::$logger->error("Block IDs list: " . print_r($blockIDs, true));
+                Core::$logger->error("User row: " . print_r($userRow, true));
                 return null;
             }
             foreach ($friendships as $friendship) {
@@ -175,6 +180,40 @@ class Core {
             }
         }
         return $returnArray;
+    }
+
+    public static function updateCentralDBEntriesUserInfo() {
+        $selectQuery = "SELECT blockableusertwitterid FROM centralisedblocklist WHERE followercount IS NULL LIMIT 100";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute();
+        if (!$success) {
+            Core::$logger->critical("Could not get central DB entries to get user info for, returning.");
+            return;
+        }
+        $userList = "";
+        while ($userTwitterID = $selectStmt->fetchColumn()) {
+            $userList .= $userTwitterID;
+            $userList .= ",";
+        }
+        if (strlen($userList) === 0) {
+            return;
+        }
+        $userList = substr($userList, 0, -1);
+        $response = TwitterUsers::userLookup($userList);
+        if ($response !== null) {
+            $updateQuery = "UPDATE centralisedblocklist SET followercount=?, twitterhandle=? WHERE blockableusertwitterid=?";
+            $data = $response->data;
+            if (is_array($data)) {
+                CoreDB::$databaseConnection->beginTransaction();
+                foreach ($data as $userData) {
+                    $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+                    $updateStmt->execute([$userData->public_metrics->followers_count, $userData->username, $userData->id]);
+                }
+                CoreDB::$databaseConnection->commit();
+            }
+        } else {
+            Core::$logger->error("Could not retrieve user list from API, cannot update central DB entries user info.");
+        }
     }
 
     public static function getUserBlockOrMuteList($userTwitterID, $operation) {
@@ -472,23 +511,51 @@ class Core {
         return false;
     }
 
-    public static function processEntriesForAllUsers() {
-        $selectQuery = "SELECT DISTINCT subjectusertwitterid FROM entriestoprocess";
+    public static function processAllEntriesForAllUsers($pnum) {
+        $selectQuery = "SELECT subjectusertwitterid,objectusertwitterid,operation,accesstoken,accesstokensecret,matchedfiltertype,matchedfiltercontent, "
+                . "addtocentraldb "
+                . "FROM entriestoprocess INNER JOIN users ON entriestoprocess.subjectusertwitterid=users.twitterid "
+                . "WHERE pnum=? ORDER BY RAND() LIMIT 10000";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute();
+        $success = $selectStmt->execute([$pnum]);
         if (!$success) {
             Core::$logger->critical("Could not get list of users to process entries for, terminating.");
             return;
         }
-        while ($row = $selectStmt->fetch()) {
-            self::processEntriesForUser($row['subjectusertwitterid']);
+        $rowCount = $selectStmt->rowCount();
+        Core::$logger->info("Processing entries for users, process number $pnum. Row count: $rowCount");
+        $i = 0;
+        $allRows = $selectStmt->fetchAll();
+        foreach ($allRows as $row) {
+            //
         }
     }
 
-    public static function processEntriesForUser($userTwitterID) {
-        $selectQuery = "SELECT * FROM entriestoprocess WHERE subjectusertwitterid=? LIMIT 15";
+    public static function processEntriesForAllUsers($pnum) {
+        $selectQuery = "SELECT DISTINCT subjectusertwitterid FROM entriestoprocess WHERE pnum=? ORDER BY RAND() LIMIT 10000";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute([$userTwitterID]);
+        $success = $selectStmt->execute([$pnum]);
+        if (!$success) {
+            Core::$logger->critical("Could not get list of users to process entries for, terminating.");
+            return;
+        }
+        $rowCount = $selectStmt->rowCount();
+        Core::$logger->info("Processing entries for users, process number $pnum. Row count: $rowCount");
+        $i = 0;
+        while ($row = $selectStmt->fetch()) {
+            $i++;
+            if ($i % 100 === 0) {
+                $mem = memory_get_usage();
+                Core::$logger->info("Processing entries for users, process number $pnum. Progress count: $i. Mem usage: $mem");
+            }
+            Core::processEntriesForUser($row['subjectusertwitterid'], $pnum);
+        }
+    }
+
+    public static function processEntriesForUser($userTwitterID, $pnum) {
+        $selectQuery = "SELECT * FROM entriestoprocess WHERE subjectusertwitterid=? AND pnum=? LIMIT 45";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute([$userTwitterID, $pnum]);
         if (!$success) {
             Core::$logger->critical("Could not get entries to process for user ID $userTwitterID, terminating.");
             return;
@@ -521,9 +588,11 @@ class Core {
         }
         $endpointMap = ['Block' => 'blocks/create', 'Unblock' => 'blocks/destroy', 'Mute' => 'mutes/users/create',
             'Unmute' => 'mutes/users/destroy'];
+
         $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
                 $accessToken, $accessTokenSecret);
-        $connection->setRetries(1, 1);
+
+        $connection->setRetries(0, 0);
         foreach ($operationRows as $row) {
             $operation = $row['operation'];
             if (array_key_exists($row['objectusertwitterid'], $exclusionList)) {
@@ -540,7 +609,14 @@ class Core {
                 if ($operation == 'Block' || $operation == 'Unblock') {
                     $params['skip_status'] = 'true';
                 }
-                $response = $connection->post($endpoint, $params);
+
+                try {
+                    $response = $connection->post($endpoint, $params);
+                } catch (\Exception $e) {
+                    CoreDB::$logger->error("Exception: " . print_r($e, true));
+                    continue;
+                }
+
                 CoreDB::updateTwitterEndpointLogs($endpoint, 1);
                 $statusCode = Core::checkResponseHeadersForErrors($connection, $userTwitterID);
                 if ($statusCode->httpCode !== StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode !== StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {

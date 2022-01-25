@@ -2,6 +2,7 @@
 
 namespace Antsstyle\NFTCryptoBlocker\Core;
 
+use Antsstyle\NFTCryptoBlocker\Core\CachedVariables;
 use Antsstyle\NFTCryptoBlocker\Credentials\DB;
 use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
@@ -26,8 +27,164 @@ class CoreDB {
         while ($row = $selectStmt->fetch()) {
             $configArray[$row['name']] = $row['value'];
         }
-
         return $configArray;
+    }
+
+    public static function assignEntryPNums() {
+        $numThreads = CoreDB::getCachedVariable(CachedVariables::NUM_PROCESSENTRIES_THREADS);
+        if (is_null($numThreads)) {
+            return;
+        }
+        if ($numThreads === false) {
+            CoreDB::$logger->critical("Could not retrieve number of ProcessEntries threads, returning.");
+            return;
+        }
+
+        $selectQuery = "SELECT COUNT(*) AS pnumcount FROM entriestoprocess WHERE pnum IS NULL";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute();
+        if (!$success) {
+            CoreDB::$logger->critical("Could not retrieve entries to process counts, returning.");
+            return false;
+        }
+        $nullCount = $selectStmt->fetchColumn();
+        if ($nullCount === false || $nullCount === 0) {
+            return;
+        } else {
+            error_log("Null pnum count: $nullCount");
+        }
+        $perThread = intval($nullCount / $numThreads);
+        CoreDB::$logger->info("Per thread count: $perThread    Null count: $nullCount     Num threads: $numThreads");
+        for ($i = 1; $i <= $numThreads; $i++) {
+            $updateQuery = "UPDATE entriestoprocess SET pnum=? WHERE pnum IS NULL LIMIT $perThread";
+            CoreDB::$logger->info("Update query: $updateQuery");
+            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+            $updateStmt->execute([$i]);
+        }
+    }
+
+    public static function calculateCachedVariables() {
+        $cachedVar = CachedVariables::CACHED_TOTAL_COUNTS_LAST_RECHECK_DATE;
+        $row = CoreDB::getCachedVariable(CachedVariables::CACHED_TOTAL_COUNTS_LAST_RECHECK_DATE);
+        if (is_null($row)) {
+            CoreDB::$logger->error("Could not retrieve cached variable $cachedVar, cannot recalculate.");
+            return;
+        } else if ($row === false) {
+            $calculate = true;
+            $nextdate = date("Y-m-d H:i:s", strtotime("+1 hour"));
+            CoreDB::updateCachedVariable(CachedVariables::CACHED_TOTAL_COUNTS_LAST_RECHECK_DATE, $nextdate);
+        }
+        $calculate = true;
+        $now = time();
+
+        if ($row !== false) {
+            $nextdate = $row;
+            if (!is_null($nextdate)) {
+                $nextdatetimestamp = strtotime($nextdate);
+                if ($nextdatetimestamp > $now) {
+                    $calculate = false;
+                }
+            }
+        }
+        if ($calculate) {
+            $selectQuery = "SELECT operation,COUNT(operation) AS opcount FROM userblockrecords GROUP BY operation";
+            $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+            $success = $selectStmt->execute();
+            if (!$success) {
+                CoreDB::$logger->error("Could not retrieve total block counts!");
+            } else {
+                while ($dbRow = $selectStmt->fetch()) {
+                    $nextdate = date("Y-m-d H:i:s", strtotime("+1 hour"));
+                    $operation = $dbRow['operation'];
+                    $opcount = $dbRow['opcount'];
+                    if ($operation === "Block") {
+                        CoreDB::updateCachedVariable(CachedVariables::CACHED_TOTAL_BLOCKS_COUNT, $opcount);
+                    } else if ($operation === "Mute") {
+                        CoreDB::updateCachedVariable(CachedVariables::CACHED_TOTAL_MUTES_COUNT, $opcount);
+                    }
+                }
+            }
+            CoreDB::updateCachedVariable(CachedVariables::CACHED_TOTAL_COUNTS_LAST_RECHECK_DATE, $nextdate);
+        }
+    }
+
+    public static function getCachedVariable($name) {
+        $selectQuery = "SELECT * FROM cachedvariables WHERE name=?";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute([$name]);
+        if (!$success) {
+            CoreDB::$logger->critical("Could not retrieve cached variable with name: $name, returning.");
+            return null;
+        }
+        $row = $selectStmt->fetch();
+        return $row['value'];
+    }
+
+    public static function updateCachedVariable($name, $value) {
+        $row = CoreDB::getCachedVariable($name);
+        if ($row === false) {
+            $insertQuery = "INSERT INTO cachedvariables (name,value) VALUES (?,?)";
+            $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
+            $success = $insertStmt->execute([$name, $value]);
+            if (!$success) {
+                CoreDB::$logger->error("Could not insert cached variable with name: $name, value: $value");
+            }
+        } else {
+            $updateQuery = "UPDATE cachedvariables SET value=? WHERE name=?";
+            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+            $success = $updateStmt->execute([$value, $name]);
+            if (!$success) {
+                CoreDB::$logger->error("Could not update cached variable with name: $name, value: $value");
+            }
+        }
+        return $success;
+    }
+
+    public static function searchCentralDB($searchString) {
+        if (!is_string($searchString) || strlen($searchString) == 0) {
+            CoreDB::$logger->error("Invalid search string parameter given, returning.");
+            return false;
+        }
+        if (strpos($searchString, "@") === 0) {
+            $searchString = substr($searchString, 1);
+            if (strlen($searchString) == 0) {
+                CoreDB::$logger->error("Invalid search string parameter given, returning.");
+                return false;
+            }
+        }
+        $searchString = "%" . $searchString . "%";
+        $selectQuery = "SELECT * FROM centralisedblocklist WHERE twitterhandle IS NOT NULL AND twitterhandle LIKE ? ORDER BY followercount DESC";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute([$searchString]);
+        if (!$success) {
+            CoreDB::$logger->error("Could not retrieve central database entries for search request, returning.");
+            return false;
+        }
+        $centralDBEntries = [];
+        while ($row = $selectStmt->fetch()) {
+            $centralDBEntries[] = $row;
+        }
+        return $centralDBEntries;
+    }
+
+    public static function getSortedCentralDBEntries($pageNumber = 1) {
+        if (!is_numeric($pageNumber) || $pageNumber <= 0) {
+            CoreDB::$logger->error("Invalid page number parameter given, returning.");
+            return false;
+        }
+        $offSet = ($pageNumber - 1) * 100;
+        $selectQuery = "SELECT * FROM centralisedblocklist WHERE followercount IS NOT NULL ORDER BY followercount DESC LIMIT 100 OFFSET $offSet";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute();
+        if (!$success) {
+            CoreDB::$logger->error("Could not retrieve central database entries, returning.");
+            return false;
+        }
+        $centralDBEntries = [];
+        while ($row = $selectStmt->fetch()) {
+            $centralDBEntries[] = $row;
+        }
+        return $centralDBEntries;
     }
 
     public static function getUserStats($userTwitterID) {
@@ -40,6 +197,16 @@ class CoreDB {
         }
         while ($row = $selectStmt->fetch()) {
             $userStats[$row['operation']] = $row['opcount'];
+        }
+        $selectQuery = "SELECT operation,COUNT(operation) AS opcount FROM entriestoprocess WHERE subjectusertwitterid=? GROUP BY operation";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute([$userTwitterID]);
+        if (!$success) {
+            CoreDB::$logger->error("Could not retrieve user stats, returning.");
+            return false;
+        }
+        while ($row = $selectStmt->fetch()) {
+            $userStats["queue" . $row['operation']] = $row['opcount'];
         }
         return $userStats;
     }
@@ -146,7 +313,7 @@ class CoreDB {
         }
 
         while ($userRow = $selectStmt->fetch()) {
-            self::checkCentralisedBlockListForUserRow($userRow, $maxID);
+            CoreDB::checkCentralisedBlockListForUserRow($userRow, $maxID);
         }
     }
 
@@ -224,7 +391,7 @@ class CoreDB {
 
     public static function getMaxCentralBlockListID() {
         $selectQuery = "SELECT MAX(id) FROM centralisedblocklist";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute();
         if (!$success) {
             CoreDB::$logger->error("Could not retrieve last blocklist update check date, returning.");
@@ -236,15 +403,15 @@ class CoreDB {
     public static function checkBlockListUpdates() {
         CoreDB::$logger->info("checking blocklist updates");
         $selectQuery = "SELECT value FROM centralconfiguration WHERE name=?";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute([Config::LAST_BLOCKLIST_UPDATE_CHECK]);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute([CachedVariables::LAST_BLOCKLIST_UPDATE_CHECK]);
         if (!$success) {
             CoreDB::$logger->error("Could not retrieve last blocklist update check date, returning.");
             return;
         }
         $dateString = $selectStmt->fetchColumn();
         $selectQuery = "SELECT MAX(dateadded) FROM blocklistentries";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute();
         if (!$success) {
             CoreDB::$logger->error("Could not retrieve last blocklist update check date, returning.");
@@ -258,8 +425,8 @@ class CoreDB {
         if (!$dateString) {
             CoreDB::$logger->error("No config item for last blocklist update check exists, inserting new.");
             $insertQuery = "INSERT INTO centralconfiguration (name, value) VALUES (?,?)";
-            $insertStmt = self::$databaseConnection->prepare($insertQuery);
-            $success = $insertStmt->execute([Config::LAST_BLOCKLIST_UPDATE_CHECK, $maxDateAdded]);
+            $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
+            $success = $insertStmt->execute([CachedVariables::LAST_BLOCKLIST_UPDATE_CHECK, $maxDateAdded]);
             if (!$success) {
                 CoreDB::$logger->error("Failed to insert last blocklist update check config item!");
                 return;
@@ -271,17 +438,17 @@ class CoreDB {
         if ($maxDateTime > $dateTime) {
             // New entries since last check date; update blocklists for users
             $selectQuery = "SELECT * FROM blocklistentries WHERE dateadded > ?";
-            $selectStmt = self::$databaseConnection->prepare($selectQuery);
+            $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
             $success = $selectStmt->execute([$dateString]);
             if (!$success) {
                 CoreDB::$logger->error("Could not retrieve last blocklist update check date, returning.");
                 return;
             }
-            self::$databaseConnection->beginTransaction();
+            CoreDB::$databaseConnection->beginTransaction();
             while ($row = $selectStmt->fetch()) {
                 $userSelectQuery = "SELECT twitterid FROM users WHERE twitterid IN (SELECT usertwitterid FROM userblocklistrecords "
                         . "WHERE blocklistid=? AND lastoperation=?) AND locked=?";
-                $userBlockSelectStmt = self::$databaseConnection->prepare($userSelectQuery);
+                $userBlockSelectStmt = CoreDB::$databaseConnection->prepare($userSelectQuery);
                 $success = $userBlockSelectStmt->execute([$row['blocklistid'], "Block", "N"]);
                 if (!$success) {
                     CoreDB::$logger->error("Failed to get list of users to block new blocklist entries for, returning.");
@@ -291,11 +458,11 @@ class CoreDB {
                 $insertBlockQuery = "INSERT IGNORE INTO entriestoprocess (blocklistid,subjectusertwitterid,objectusertwitterid,operation) "
                         . "VALUES (?,?,?,?)";
                 while ($userBlockTwitterID = $userBlockSelectStmt->fetchColumn()) {
-                    $insertBlockStmt = self::$databaseConnection->prepare($insertBlockQuery);
+                    $insertBlockStmt = CoreDB::$databaseConnection->prepare($insertBlockQuery);
                     $insertBlockStmt->execute([$row['blocklistid'], $userBlockTwitterID, $row['blockusertwitterid'], "Block"]);
                 }
 
-                $userMuteSelectStmt = self::$databaseConnection->prepare($userSelectQuery);
+                $userMuteSelectStmt = CoreDB::$databaseConnection->prepare($userSelectQuery);
                 $success = $userMuteSelectStmt->execute([$row['blocklistid'], "Mute", "N"]);
                 if (!$success) {
                     CoreDB::$logger->error("Failed to get list of users to mute new blocklist entries for, returning.");
@@ -303,14 +470,14 @@ class CoreDB {
                 }
 
                 while ($userMuteTwitterID = $userMuteSelectStmt->fetchColumn()) {
-                    $insertMuteStmt = self::$databaseConnection->prepare($insertBlockQuery);
+                    $insertMuteStmt = CoreDB::$databaseConnection->prepare($insertBlockQuery);
                     $insertMuteStmt->execute([$row['blocklistid'], $userBlockTwitterID, $row['blockusertwitterid'], "Mute"]);
                 }
             }
             $updateQuery = "UPDATE centralconfiguration SET value=? WHERE name=?";
-            $updateStmt = self::$databaseConnection->prepare($updateQuery);
-            $updateStmt->execute([$maxDateAdded, Config::LAST_BLOCKLIST_UPDATE_CHECK]);
-            self::$databaseConnection->commit();
+            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+            $updateStmt->execute([$maxDateAdded, CachedVariables::LAST_BLOCKLIST_UPDATE_CHECK]);
+            CoreDB::$databaseConnection->commit();
         }
     }
 
@@ -361,7 +528,7 @@ class CoreDB {
         }
 
         $selectQuery = "SELECT usertwitterid FROM userautomationsettings WHERE usertwitterid=?";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute([$userTwitterID]);
         if (!$success) {
             CoreDB::$logger->error("Could not determine existence of automation settings for user ID $userTwitterID");
@@ -378,7 +545,7 @@ class CoreDB {
                 . "ON DUPLICATE KEY UPDATE matchingphraseoperation=?, "
                 . "nftprofilepictureoperation=?, urlsoperation=?, cryptousernamesoperation=?, "
                 . "nftfollowersoperation=?, centraldatabaseoperation=?, whitelistfollowings=?";
-        $insertStmt = self::$databaseConnection->prepare($insertQuery);
+        $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
         $success = $insertStmt->execute([$userTwitterID, $phraseString, $nftProfilePicturesString, $urlString, $cryptoUserNamesString,
             $NFTFollowersString, $centralDatabaseString, $followerWhitelistString, $phraseString,
             $nftProfilePicturesString, $urlString, $cryptoUserNamesString, $NFTFollowersString, $centralDatabaseString, $followerWhitelistString]);
@@ -389,7 +556,7 @@ class CoreDB {
 
         if ($addCentralDBEntries) {
             $idList = [$userTwitterID];
-            self::checkCentralisedBlockListForUsers($idList);
+            CoreDB::checkCentralisedBlockListForUsers($idList);
         }
 
         return $success;
@@ -397,7 +564,7 @@ class CoreDB {
 
     public static function getUserInfo($userTwitterID) {
         $selectQuery = "SELECT * FROM users WHERE twitterid=?";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute([$userTwitterID]);
         if (!$success) {
             CoreDB::$logger->error("Could not retrieve user information, returning.");
@@ -409,7 +576,7 @@ class CoreDB {
 
     public static function getUserAutomationSettings($userTwitterID) {
         $selectQuery = "SELECT * FROM userautomationsettings WHERE usertwitterid=?";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute([$userTwitterID]);
         if (!$success) {
             CoreDB::$logger->error("Could not retrieve user automation settings, returning.");
@@ -423,7 +590,7 @@ class CoreDB {
         $selectQuery = "SELECT *,(SELECT name FROM blocklists WHERE userblocklistrecords.blocklistid=blocklists.id) AS name FROM "
                 . "userautomationsettings INNER JOIN userblocklistrecords ON "
                 . "userautomationsettings.usertwitterid=userblocklistrecords.usertwitterid WHERE userautomationsettings.usertwitterid=?";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute([$userTwitterID]);
         if (!$success) {
             CoreDB::$logger->error("Could not retrieve user blocklist automation settings, returning.");
@@ -435,7 +602,7 @@ class CoreDB {
 
     public static function getBlockablePhrases() {
         $selectQuery = "SELECT * FROM blockablephrases ORDER BY phrase ASC";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute();
         if (!$success) {
             CoreDB::$logger->error("Could not retrieve list of blockable phrases, returning.");
@@ -447,7 +614,7 @@ class CoreDB {
 
     public static function getCentralDBCount() {
         $selectQuery = "SELECT COUNT(*) FROM centralisedblocklist";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute();
         if (!$success) {
             CoreDB::$logger->error("Could not retrieve count of central DB rows, returning.");
@@ -459,7 +626,7 @@ class CoreDB {
 
     function getBlockableURLs() {
         $selectQuery = "SELECT * FROM blockableurls ORDER BY url ASC";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute();
         if (!$success) {
             CoreDB::$logger->error("Could not retrieve list of blockable URLs, returning.");
@@ -471,7 +638,7 @@ class CoreDB {
 
     public static function getBlockableUsernameRegexes() {
         $selectQuery = "SELECT * FROM blockableusernameregexes";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute();
         if (!$success) {
             CoreDB::$logger->error("Could not retrieve list of blockable username regexes, returning.");
@@ -485,7 +652,7 @@ class CoreDB {
         $date = date("Y-m-d");
         $insertQuery = "INSERT INTO twitterendpointlogs (date,endpoint,callcount) VALUES (?,?,?) "
                 . "ON DUPLICATE KEY UPDATE callcount=callcount+?";
-        $insertStmt = self::$databaseConnection->prepare($insertQuery);
+        $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
         $success = $insertStmt->execute([$date, $endpoint, $callCount, $callCount]);
         if (!$success) {
             CoreDB::$logger->error("Could not update endpoints logs. Parameters were: $endpoint , $callCount");
@@ -499,7 +666,7 @@ class CoreDB {
             return;
         }
         $updateQuery = "UPDATE users SET locked=? WHERE twitterid=?";
-        $updateStmt = self::$databaseConnection->prepare($updateQuery);
+        $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
         $success = $updateStmt->execute([$locked, $userTwitterID]);
         if (!$success) {
             CoreDB::$logger->error("Could not update locked property for user with twitter ID $userTwitterID");
@@ -509,7 +676,7 @@ class CoreDB {
 
     public static function deleteUser($userTwitterID) {
         $deleteQuery = "DELETE FROM users WHERE twitterid=?";
-        $deleteStmt = self::$databaseConnection->prepare($deleteQuery);
+        $deleteStmt = CoreDB::$databaseConnection->prepare($deleteQuery);
         $success = $deleteStmt->execute([$userTwitterID]);
         if (!$success) {
             CoreDB::$logger->error("Could not delete user with twitter ID $userTwitterID");
@@ -520,7 +687,7 @@ class CoreDB {
     // This function is incomplete and does not work.
     public static function insertBannedUsers($users) {
         $selectQuery = "SELECT id FROM blocklists WHERE name=?";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute(["NFT Artists"]);
         if (!$success) {
             CoreDB::$logger->error("Could not get id of NFT Artists blocklist, returning.");
@@ -549,7 +716,7 @@ class CoreDB {
         $userTwitterID = $access_token['user_id'];
         $insertQuery = "INSERT INTO users (twitterid,accesstoken,accesstokensecret) VALUES (?,?,?) ON DUPLICATE KEY UPDATE "
                 . "accesstoken=?, accesstokensecret=? ";
-        $success = self::$databaseConnection->prepare($insertQuery)
+        $success = CoreDB::$databaseConnection->prepare($insertQuery)
                 ->execute([$userTwitterID, $accessToken, $accessTokenSecret, $accessToken, $accessTokenSecret]);
         return $success;
     }
@@ -557,7 +724,7 @@ class CoreDB {
     public static function checkUserOperation($userTwitterID, $blockListName, $operation) {
         $selectQuery = "SELECT * FROM userblocklistrecords WHERE usertwitterid=? AND blocklistid=(SELECT id FROM blocklists WHERE name=?) "
                 . "AND lastoperation=?";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute([$userTwitterID, $blockListName, $operation]);
         if (!$success) {
             CoreDB::$logger->error("Could not get id of NFT Artists blocklist, returning.");
@@ -574,7 +741,7 @@ class CoreDB {
         $operation = strtolower(filter_var($operation, FILTER_SANITIZE_STRING));
         $operation = ucfirst($operation);
         $userTwitterID = filter_var($userTwitterID, FILTER_SANITIZE_NUMBER_INT);
-        $doneAlready = self::checkUserOperation($userTwitterID, $blockListName, $operation);
+        $doneAlready = CoreDB::checkUserOperation($userTwitterID, $blockListName, $operation);
         if ($doneAlready) {
             return true;
         }
@@ -583,7 +750,7 @@ class CoreDB {
                 . "SELECT @usertwitterid, blocklistid, blockusertwitterid, '$operation' FROM blocklistentries WHERE blocklistid="
                 . "(SELECT id FROM blocklists WHERE name=?) AND blockusertwitterid NOT IN (SELECT objectusertwitterid FROM "
                 . "userinitialblockrecords WHERE subjectusertwitterid=? AND operation='$operation') ON DUPLICATE KEY UPDATE operation='$operation'";
-        $success1 = self::$databaseConnection->prepare($insertQuery)
+        $success1 = CoreDB::$databaseConnection->prepare($insertQuery)
                 ->execute([$blockListName, $userTwitterID]);
         if (!$success1) {
             return false;
@@ -592,7 +759,7 @@ class CoreDB {
                 . "INSERT INTO userblocklistrecords (usertwitterid,blocklistid,lastoperation) "
                 . "SELECT @usertwitterid, id, '$operation' FROM blocklists WHERE name=?"
                 . " ON DUPLICATE KEY UPDATE lastoperation='$operation'";
-        $success2 = self::$databaseConnection->prepare($insertQuery)
+        $success2 = CoreDB::$databaseConnection->prepare($insertQuery)
                 ->execute([$blockListName]);
         return $success2;
     }
@@ -611,14 +778,12 @@ class CoreDB {
         $updateQuery = substr($updateQuery, 0, -1);
         $updateQuery .= ")";
         try {
-            $updateStmt = self::$databaseConnection->prepare($updateQuery);
+            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
             $updateStmt->execute($updateParams);
         } catch (\Exception $e) {
-            CoreDB::$logger->error("Failed to mark centralised block list entries for deletion!");
-            CoreDB::$logger->error(print_r($e, true));
+            CoreDB::$logger->error("Failed to mark centralised block list entries for deletion!\n" . print_r($e, true));
             CoreDB::$logger->error("Update query: $updateQuery");
-            CoreDB::$logger->error("Update params:");
-            CoreDB::$logger->error(print_r($updateParams, true));
+            CoreDB::$logger->error("Update params:\n" . print_r($updateParams, true));
         }
         $deleteParams[] = "centraldb";
         $deleteQuery = "DELETE FROM entriestoprocess WHERE addedfrom=? AND objectusertwitterid IN (";
@@ -629,7 +794,7 @@ class CoreDB {
         $deleteQuery = substr($deleteQuery, 0, -1);
         $deleteQuery .= ")";
         try {
-            $deleteStmt = self::$databaseConnection->prepare($deleteQuery);
+            $deleteStmt = CoreDB::$databaseConnection->prepare($deleteQuery);
             $deleteStmt->execute($deleteParams);
         } catch (\Exception $e) {
             CoreDB::$logger->error("Failed to delete marked entries to process from queue!");
@@ -645,8 +810,8 @@ class CoreDB {
             return;
         }
         $insertQuery = "INSERT INTO centralisedblocklist (blockableusertwitterid, matchedfiltertype, matchedfiltercontent, addedfrom) "
-                . "VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE blockableusertwitterid=?";
-        self::$databaseConnection->beginTransaction();
+                . "VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE blockableusertwitterid=?, matchcount=matchcount+1";
+        CoreDB::$databaseConnection->beginTransaction();
         try {
             foreach ($centralBlockListParams as $singleUserParams) {
                 if (is_null($singleUserParams[2])) {
@@ -655,13 +820,13 @@ class CoreDB {
                     $blockedID = $singleUserParams[0];
                     CoreDB::$logger->error("Matched filter type: $filterType    Blockable user ID: $blockedID");
                 }
-                $insertStmt = self::$databaseConnection->prepare($insertQuery);
+                $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
                 $insertStmt->execute($singleUserParams);
             }
-            self::$databaseConnection->commit();
+            CoreDB::$databaseConnection->commit();
         } catch (\Exception $e) {
             CoreDB::$logger->error(print_r($e, true));
-            self::$databaseConnection->rollback();
+            CoreDB::$databaseConnection->rollback();
         }
     }
 
@@ -674,7 +839,7 @@ class CoreDB {
             $deleteQuery .= ",?";
         }
         $deleteQuery .= ")";
-        $success = self::$databaseConnection->prepare($deleteQuery)
+        $success = CoreDB::$databaseConnection->prepare($deleteQuery)
                 ->execute($deleteParams);
         return $success;
     }
@@ -683,19 +848,19 @@ class CoreDB {
         $insertQuery = "INSERT INTO userblockrecords (subjectusertwitterid, blocklistid, objectusertwitterid, operation, matchedfiltertype, matchedfiltercontent, "
                 . "dateprocessed, addedfrom) VALUES (?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE operation=?, matchedfiltertype=?, matchedfiltercontent=?";
         $dateProcessed = date('Y-m-d H:i:s');
-        self::$databaseConnection->beginTransaction();
+        CoreDB::$databaseConnection->beginTransaction();
         foreach ($recordRows as $row) {
-            $insertStmt = self::$databaseConnection->prepare($insertQuery);
+            $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
             $insertStmt->execute([$row['subjectusertwitterid'], $row['blocklistid'], $row['objectusertwitterid'], $row['operation'], $row['matchedfiltertype'],
                 $row['matchedfiltercontent'], $dateProcessed, $row['addedfrom'], $row['operation'], $row['matchedfiltertype'],
                 $row['matchedfiltercontent']]);
         }
-        self::$databaseConnection->commit();
+        CoreDB::$databaseConnection->commit();
     }
 
     public static function getBlockLists() {
         $selectQuery = "SELECT * FROM blocklists";
-        $selectStmt = self::$databaseConnection->prepare($selectQuery);
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute();
         if (!$success) {
             CoreDB::$logger->error("Could not get list of users to process entries for, terminating.");
@@ -708,7 +873,7 @@ class CoreDB {
     public static function initialiseConnection() {
         try {
             $params = "mysql:host=" . DB::server_name . ";dbname=" . DB::database . ";port=" . DB::port . ";charset=UTF8MB4";
-            CoreDB::$databaseConnection = new \PDO($params, DB::username, DB::password, self::options);
+            CoreDB::$databaseConnection = new \PDO($params, DB::username, DB::password, CoreDB::options);
         } catch (\Exception $e) {
             CoreDB::$logger->emergency("Failed to create database connection. Exception:");
             CoreDB::$logger->emergency(print_r($e, true));

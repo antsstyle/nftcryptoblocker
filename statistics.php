@@ -43,6 +43,17 @@ if ($userStats !== false) {
     } else {
         $muteCount = 0;
     }
+    if (isset($userStats['queueBlock'])) {
+        $queuedBlockCount = $userStats['queueBlock'];
+    } else {
+        $queuedBlockCount = 0;
+    }
+    if (isset($userStats['queueMute'])) {
+        $queuedMuteCount = $userStats['queueMute'];
+    } else {
+        $queuedMuteCount = 0;
+    }
+    $totalQueueCount = $queuedBlockCount + $queuedMuteCount;
 }
 ?>
 
@@ -69,8 +80,13 @@ if ($userStats !== false) {
             if ($userStats === false) {
                 echo "A database error occurred retrieving statistics, try again later.";
             } else {
-                echo "Blocked accounts: $blockCount<br/>";
-                echo "Muted accounts: $muteCount</br>";
+                if ($totalQueueCount > 100) {
+                    echo "Queued operations are done in batches of 15, once per 15 minutes, per user. As such, if you have many queued operations, "
+                    . "expect them to take a while; check back again in a few hours to see how it is progressing.<br/><br/>";
+                }
+                echo "<b>There is currently a very large backlog of queued actions to process; as such, actions will take longer to process than the above.</b><br/><br/>";
+                echo "Blocked accounts: $blockCount &nbsp;&nbsp; (Currently queued for blocking: $queuedBlockCount)</br>";
+                echo "Muted accounts: $muteCount &nbsp;&nbsp;&nbsp;&nbsp; (Currently queued for muting: $queuedMuteCount)</br>";
             }
             ?>
         </div>

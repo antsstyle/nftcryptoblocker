@@ -1,7 +1,9 @@
 <?php
 require __DIR__ . '/vendor/autoload.php';
 
+use Antsstyle\NFTCryptoBlocker\Core\CachedVariables;
 use Antsstyle\NFTCryptoBlocker\Core\Core;
+use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 use Antsstyle\NFTCryptoBlocker\Core\Config;
 use Antsstyle\NFTCryptoBlocker\Core\Session;
 use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
@@ -31,6 +33,27 @@ try {
 } catch (\Exception $e) {
     
 }
+
+$blockCount = CoreDB::getCachedVariable(CachedVariables::CACHED_TOTAL_BLOCKS_COUNT);
+if ($blockCount !== null && $blockCount !== false) {
+    if ($blockCount > 1000000000) {
+        $blockCount = round($blockCount / 1000000000, 2, PHP_ROUND_HALF_DOWN) . "B";
+    } else if ($blockCount > 1000000) {
+        $blockCount = round($blockCount / 1000000, 2, PHP_ROUND_HALF_DOWN) . "M";
+    } else if ($blockCount > 1000) {
+        $blockCount = floor($blockCount / 1000) . "K";
+    }
+}
+$muteCount = CoreDB::getCachedVariable(CachedVariables::CACHED_TOTAL_MUTES_COUNT);
+if ($muteCount !== null && $muteCount !== false) {
+    if ($muteCount > 1000000000) {
+        $muteCount = round($muteCount / 1000000000, 2, PHP_ROUND_HALF_DOWN) . "B";
+    } else if ($muteCount > 1000000) {
+        $muteCount = round($muteCount / 1000000, 2, PHP_ROUND_HALF_DOWN) . "M";
+    } else if ($muteCount > 1000) {
+        $muteCount = floor($muteCount / 1000) . "K";
+    }
+}
 ?>
 
 <html>
@@ -53,6 +76,21 @@ try {
             <p>
                 This app can automatically block or mute cryptobros and NFT artists for you.
             </p>
+            <?php
+            if ((!is_null($blockCount) && $blockCount !== false) || (!is_null($muteCount) && $muteCount !== false)) {
+                echo "<p>So far, it has performed ";
+                if ((!is_null($blockCount) && $blockCount !== false)) {
+                    echo "<b>" . $blockCount . "</b> blocks ";
+                }
+                if ((!is_null($muteCount) && $muteCount !== false)) {
+                    if ((!is_null($blockCount) && $blockCount !== false)) {
+                        echo "and ";
+                    }
+                    echo "<b>" . $muteCount . "</b> mutes ";
+                }
+                echo "on behalf of users.</p>";
+            }
+            ?>
             <p>
                 Once you sign in, you will be taken to the settings page where you can decide what conditions to set. 
                 The app will not block or mute anything until you save your settings.
@@ -65,6 +103,13 @@ try {
                 <img alt="Sign in with Twitter" src="src/images/signinwithtwitter.png"
                      width=158" height="28">
             </a>
+            <br/><br/>
+            <div class="halted">
+                NFT Artist & Cryptobro Blocker is currently not accepting any new signups, while scaling issues are addressed. You can still sign in to the 
+                app, but only existing users are able to change settings at this time.
+                <br/><br/>
+                Current estimate for when new signups will begin: 22 Feb. Note this is a wild guess at the moment and is subject to change.
+            </div>
             <br/><br/>
             <button class="collapsible">FAQs</button>
             <div class="content">

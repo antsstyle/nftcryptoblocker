@@ -2,7 +2,7 @@
 
 namespace Antsstyle\NFTCryptoBlocker\Core;
 
-use Antsstyle\NFTCryptoBlocker\Core\Config;
+use Antsstyle\NFTCryptoBlocker\Core\CachedVariables;
 use Antsstyle\NFTCryptoBlocker\Core\StatusCode;
 use Antsstyle\NFTCryptoBlocker\Credentials\AdminUserAuth;
 use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
@@ -11,8 +11,25 @@ use Abraham\TwitterOAuth\TwitterOAuth;
 use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 class TwitterUsers {
-    
+
     public static $logger;
+
+    public static function userLookup($userList) {
+        $params['ids'] = $userList;
+        $params['user.fields'] = "public_metrics,username";
+        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret, null, APIKeys::bearer_token);
+        $connection->setApiVersion('2');
+        $connection->setRetries(1, 1);
+        $response = $connection->get("users", $params);
+        CoreDB::updateTwitterEndpointLogs("users", 1);
+        $statusCode = Core::checkResponseHeadersForErrors($connection);
+        if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+            TwitterUsers::$logger->error("Credentials error");
+            return null;
+        }
+        TwitterUsers::$logger->info(print_r($response, true));
+        return $response;
+    }
 
     public static function testUserSearch($query) {
         $endpoint = "users/search";
@@ -43,10 +60,10 @@ class TwitterUsers {
             return;
         }
         foreach ($phrases as $phrase) {
-            self::userSearch($phrase, $phrases, $urls, $regexes);
+            TwitterUsers::userSearch($phrase, $phrases, $urls, $regexes);
         }
         foreach ($urls as $url) {
-            self::userSearch("url:" . $url, $phrases, $urls, $regexes);
+            TwitterUsers::userSearch("url:" . $url, $phrases, $urls, $regexes);
         }
     }
 
@@ -64,11 +81,12 @@ class TwitterUsers {
             CoreDB::updateTwitterEndpointLogs($endpoint, 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection);
             if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+                TwitterUsers::$logger->error("Credentials error in users/search");
                 break;
             }
             $subjectUserInfo['matchingphraseoperation'] = "Block";
             foreach ($response as $userObject) {
-                $filtersMatched = self::checkNFTFilters($subjectUserInfo, $userObject, $phrases, $urls, $regexes);
+                $filtersMatched = TwitterUsers::checkNFTFilters($subjectUserInfo, $userObject, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
                     TwitterUsers::$logger->info("Filters matched for users/search! Object user ID: $userObject->id. Filter was:");
                     TwitterUsers::$logger->info(print_r($filtersMatched, true));
@@ -94,6 +112,7 @@ class TwitterUsers {
         CoreDB::updateTwitterEndpointLogs("users/:id", 1);
         $statusCode = Core::checkResponseHeadersForErrors($connection);
         if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+            TwitterUsers::$logger->error("Credentials error in users/id");
             return null;
         }
         return $response;
@@ -102,7 +121,7 @@ class TwitterUsers {
     public static function checkNFTFollowersForAllUsers() {
         $selectQuery = "SELECT value FROM centralconfiguration WHERE name=?";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute([Config::FOLLOWER_CHECK_TIME_INTERVAL_SECONDS]);
+        $success = $selectStmt->execute([CachedVariables::FOLLOWER_CHECK_TIME_INTERVAL_SECONDS]);
         if (!$success) {
             TwitterUsers::$logger->critical("Could not get users to check NFT followers for, returning.");
             return;
@@ -131,7 +150,7 @@ class TwitterUsers {
             return;
         }
         while ($userRow = $selectStmt->fetch()) {
-            self::checkNFTFollowersForUser($userRow, $phrases, $urls, $regexes);
+            TwitterUsers::checkNFTFollowersForUser($userRow, $phrases, $urls, $regexes);
         }
     }
 
@@ -178,7 +197,7 @@ class TwitterUsers {
 
                 // check if the tweet is one we want to examine
                 // check description, profile picture: add block to entries to process if match found
-                $filtersMatched = self::checkNFTFilters($userRow, $objectUser, $phrases, $urls, $regexes);
+                $filtersMatched = TwitterUsers::checkNFTFilters($userRow, $objectUser, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
                     TwitterUsers::$logger->info("Filters matched for user follower! Object user ID: $objectUser->id. Filter was:");
                     TwitterUsers::$logger->info(print_r($filtersMatched, true));

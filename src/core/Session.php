@@ -58,7 +58,7 @@ class Session {
                 throw new \Exception('Useragent mixmatch (possible session hijacking attempt).');
             }
             if (!$_SESSION['OBSOLETE'] && mt_rand(1, 100) == 1) {
-                self::regenerateSession();
+                Session::regenerateSession();
             }
             return true;
         } catch (\Exception $e) {

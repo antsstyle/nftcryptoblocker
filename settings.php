@@ -34,9 +34,9 @@ if ($userInfo === false) {
     exit();
 }
 
+$newUser = $userInfo['newuser'];
+
 $blockLists = CoreDB::getBlockLists();
-$blockablePhrases = CoreDB::getBlockablePhrases();
-$blockableURLs = CoreDB::getBlockableURLs();
 $centralDBCount = CoreDB::getCentralDBCount();
 $blockableURLsPage = Config::HOMEPAGE_URL . "blockableurls";
 $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
@@ -67,6 +67,10 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
             </div>
             <p>
                 <?php
+                if ($newUser === "Y") {
+                    echo "Error: New users cannot currently use the app at this time.<br/><br/>";
+                    exit();
+                }
                 if (!$blockLists) {
                     echo "Error: could not load block list names.<br/><br/>";
                     exit();
@@ -118,8 +122,7 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
                 echo "<input type=\"radio\" id=\"noaction urls\" name=\"urls\" value=\"noaction_urls\" checked=\"checked\">";
                 echo "<label for=\"noaction urls\"> Do nothing </label></div><br/><br/>";
 
-                echo "<b>Users with 'verified' NFT profile pictures (currently not supported by Twitter API: you can mark it here and "
-                . "they'll be actioned later when the API is updated.):</b>";
+                echo "<b>Users with 'verified' NFT profile pictures:</b>";
                 echo "<br/><br/><div class=\"formsection\">";
                 echo "<input type=\"radio\" id=\"block nftprofilepictures\" name=\"nftprofilepictures\" value=\"block_nftprofilepictures\">";
                 echo "<label for=\"block nftprofilepictures\"> Block </label>";
@@ -157,7 +160,7 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
                 . " database entries that match filters you have chosen to block or mute above."
                 . "<br/><br/>"
                 . "There are currently <b>$centralDBCount</b> crypto/NFT users in the central database. If you enable this option, the app will also action"
-                        . " future database entries for you.<br/><br/>"
+                . " future database entries for you.<br/><br/>"
                 . "<div class=\"formsection\">";
                 echo "<input type=\"radio\" id=\"block centraldatabase\" name=\"centraldatabase\" value=\"block_centraldatabase\">";
                 echo "<label for=\"block centraldatabase\"> Block </label>";

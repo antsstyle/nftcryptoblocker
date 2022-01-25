@@ -2,7 +2,7 @@
 
 namespace Antsstyle\NFTCryptoBlocker\Cronjobs;
 
-set_time_limit(600);
+set_time_limit(0);
 
 chdir(dirname(__DIR__, 2));
 
@@ -12,4 +12,9 @@ require $dir . '/vendor/autoload.php';
 
 use Antsstyle\NFTCryptoBlocker\Core\TwitterTimelines;
 
-TwitterTimelines::checkMentionsTimelineForAllUsers();
+try {
+    TwitterTimelines::checkMentionsTimelineForAllUsers();
+} catch (\Exception $e) {
+    error_log("Exception during mention timelines cronjob: " . print_r($e, true));
+}
+

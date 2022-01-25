@@ -13,8 +13,7 @@ require $dir . '/vendor/autoload.php';
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 
 try {
-    CoreDB::checkBlockListUpdates();
+    CoreDB::assignEntryPNums();
 } catch (\Exception $e) {
-    error_log("Exception during check blocklist updates cronjob: " . print_r($e, true));
+    error_log("Failed to assign entry pnums : " . print_r($e, true));
 }
-

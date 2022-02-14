@@ -5,6 +5,7 @@ namespace Antsstyle\NFTCryptoBlocker;
 require __DIR__ . '/vendor/autoload.php';
 
 use Antsstyle\NFTCryptoBlocker\Core\Core;
+use Antsstyle\NFTCryptoBlocker\Core\CachedVariables;
 use Antsstyle\NFTCryptoBlocker\Core\Config;
 use Antsstyle\NFTCryptoBlocker\Core\Session;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
@@ -29,6 +30,8 @@ $nextPage = $pageNum + 1;
 $prevPage = $pageNum - 1;
 
 $centralDBEntriesPage = CoreDB::getSortedCentralDBEntries($pageNum);
+$minFollowerCount = CoreDB::getCachedVariable(CachedVariables::CENTRALISEDBLOCKLIST_MIN_FOLLOWERCOUNT);
+$minMatchCount = CoreDB::getCachedVariable(CachedVariables::CENTRALISEDBLOCKLIST_MIN_MATCHCOUNT);
 ?>
 
 <html>
@@ -51,7 +54,11 @@ $centralDBEntriesPage = CoreDB::getSortedCentralDBEntries($pageNum);
             <?php Core::echoSideBar(); ?>
             <h2>Central Database Entries</h2>
             <p>
-                This is the central database of detected NFT/crypto users, sorted by follower count. Click a column header to sort by that column.
+                <?php
+                echo "This is the central database of detected NFT/crypto users, sorted by follower count (note that this page will only show detected users with "
+                . "a minimum of $minFollowerCount followers, who matched filters from users at least $minMatchCount times). ";
+                ?>
+
             </p>
             <p>
                 You can search the entire database (not just this page) by twitter handle using the search box below.
@@ -81,12 +88,14 @@ $centralDBEntriesPage = CoreDB::getSortedCentralDBEntries($pageNum);
             <br/><br/>
 
             <input type="text" id="centraldbsearch" placeholder="Search by twitter handle...">
-            <button type="button" id="searchbutton" onclick="centralDBSearch('centraldbsearch')">Search</button>
-            <button type="button" id="resetbutton" onclick="resetCentralDBSearchTable()">Reset</button>
+            <button type="button" id="searchbutton" onclick="dbSearch('centraldbsearch', 'central')">Search</button>
+            <button type="button" id="resetbutton" onclick="resetSearchTable()">Reset</button>
             <br/><br/>
             <div id="searchresultstextdiv">
 
             </div>
+            Click a column header to sort by that column.
+            <br/><br/>
             <div id="searchresultsdiv">
                 <table id="maintable" class="dblisttable">
                     <tr>
@@ -95,6 +104,7 @@ $centralDBEntriesPage = CoreDB::getSortedCentralDBEntries($pageNum);
                         <th onclick="sortTable(2, 'maintable')">Matched filter content</th>
                         <th onclick="sortTable(3, 'maintable')">Date added</th>
                         <th onclick="sortTable(4, 'maintable')">Follower #</th>
+                        <th onclick="sortTable(5, 'maintable')">Match count</th>
                     </tr>
                     <?php
                     if (!$centralDBEntriesPage) {
@@ -115,6 +125,7 @@ $centralDBEntriesPage = CoreDB::getSortedCentralDBEntries($pageNum);
                             }
                             echo "<td>" . $dateAdded . "</td>";
                             echo "<td>" . $centralDBEntry['followercount'] . "</td>";
+                            echo "<td>" . $centralDBEntry['matchcount'] . "</td>";
                             echo "</tr>";
                         }
                     }
@@ -126,4 +137,5 @@ $centralDBEntriesPage = CoreDB::getSortedCentralDBEntries($pageNum);
             </div>
         </div>
     </body>
+    <script src="Collapsibles.js"></script>
 </html>

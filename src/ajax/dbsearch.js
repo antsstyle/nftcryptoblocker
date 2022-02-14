@@ -1,4 +1,4 @@
-function centralDBSearch(id) {
+function dbSearch(id, type) {
     var input = document.getElementById(id);
     if (input === null) {
         return;
@@ -27,7 +27,7 @@ function centralDBSearch(id) {
                 }
             }
         };
-        var params = 'searchstring='.concat(searchstring);
+        var params = 'searchstring='.concat(searchstring).concat('&type=').concat(type);
         //Send the proper header information along with the request
         xmlhttp.open("POST", "src/ajax/dbsearch.php", true);
         xmlhttp.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
@@ -35,7 +35,7 @@ function centralDBSearch(id) {
     }
 }
 
-function resetCentralDBSearchTable() {
+function resetSearchTable() {
     document.getElementById("searchresultsdiv").innerHTML = document.getElementById("tablecachediv").innerHTML;
     document.getElementById("searchresultstextdiv").innerHTML = "";
 }

@@ -10,7 +10,7 @@ use Abraham\TwitterOAuth\TwitterOAuth;
 use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 class TwitterTweets {
-    
+
     public static $logger;
 
     public static function testTweetSearch($query) {
@@ -32,8 +32,7 @@ class TwitterTweets {
             $response = $connection->get($query, $params);
             CoreDB::updateTwitterEndpointLogs("tweets/search/recent", 1);
             $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK
-                    || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
             }
             $tweets = $response->data;
@@ -52,7 +51,8 @@ class TwitterTweets {
                 $filtersMatched = Core::checkFiltersForTweetSearch($user, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
                     $updateParams[] = [$user->id, $filtersMatched['filtertype'],
-                        $filtersMatched['filtercontent'], "tweets/search", $user->id];
+                        $filtersMatched['filtercontent'], "tweets/search", 
+                        $filtersMatched['filtertype'], $filtersMatched['filtercontent'], "tweets/search"];
                 }
             }
 

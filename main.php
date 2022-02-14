@@ -37,7 +37,11 @@ try {
 $blockCount = CoreDB::getCachedVariable(CachedVariables::CACHED_TOTAL_BLOCKS_COUNT);
 if ($blockCount !== null && $blockCount !== false) {
     if ($blockCount > 1000000000) {
-        $blockCount = round($blockCount / 1000000000, 2, PHP_ROUND_HALF_DOWN) . "B";
+        $blockCount = round($blockCount / 1000000000, 1, PHP_ROUND_HALF_DOWN) . "B";
+    } else if ($blockCount > 100000000) {
+        $blockCount = round($blockCount / 1000000, 0, PHP_ROUND_HALF_DOWN) . "M";
+    } else if ($blockCount > 10000000) {
+        $blockCount = round($blockCount / 1000000, 1, PHP_ROUND_HALF_DOWN) . "M";
     } else if ($blockCount > 1000000) {
         $blockCount = round($blockCount / 1000000, 2, PHP_ROUND_HALF_DOWN) . "M";
     } else if ($blockCount > 1000) {
@@ -47,7 +51,11 @@ if ($blockCount !== null && $blockCount !== false) {
 $muteCount = CoreDB::getCachedVariable(CachedVariables::CACHED_TOTAL_MUTES_COUNT);
 if ($muteCount !== null && $muteCount !== false) {
     if ($muteCount > 1000000000) {
-        $muteCount = round($muteCount / 1000000000, 2, PHP_ROUND_HALF_DOWN) . "B";
+        $muteCount = round($muteCount / 1000000000, 1, PHP_ROUND_HALF_DOWN) . "B";
+    } else if ($muteCount > 100000000) {
+        $muteCount = round($muteCount / 1000000, 0, PHP_ROUND_HALF_DOWN) . "M";
+    } else if ($muteCount > 10000000) {
+        $muteCount = round($muteCount / 1000000, 1, PHP_ROUND_HALF_DOWN) . "M";
     } else if ($muteCount > 1000000) {
         $muteCount = round($muteCount / 1000000, 2, PHP_ROUND_HALF_DOWN) . "M";
     } else if ($muteCount > 1000) {
@@ -59,7 +67,7 @@ if ($muteCount !== null && $muteCount !== false) {
 <html>
     <head>
         <link rel="stylesheet" href="main.css" type="text/css">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:site" content="@antsstyle" />
         <meta name="twitter:title" content="NFT Artist & Cryptobro Blocker" />
@@ -104,33 +112,38 @@ if ($muteCount !== null && $muteCount !== false) {
                      width=158" height="28">
             </a>
             <br/><br/>
-            <div class="halted">
-                NFT Artist & Cryptobro Blocker is currently not accepting any new signups, while scaling issues are addressed. You can still sign in to the 
-                app, but only existing users are able to change settings at this time.
+            <p>
+                Hosting this app costs money, and developing this app is taking a lot of my time at the moment. If you'd like to support me, 
+                <a href="https://patreon.com/antsstyle" target="_blank">I have a patreon here.</a> I'd be very grateful for your support! It will 
+                allow me to pay for the hosting costs and spend more time on developing this app and others.
                 <br/><br/>
-                Current estimate for when new signups will begin: 22 Feb. Note this is a wild guess at the moment and is subject to change.
-            </div>
-            <br/><br/>
-            <button class="collapsible">FAQs</button>
-            <div class="content">
-                <h3>Does this app perform any actions if I sign in but don't save any settings?</h3>
-                <p>
-                    No. The app will not perform any actions on your account until you save your settings. 
-                    If you do not save any settings, it will do nothing.
-                </p>
-                <h3>Why does this app need so many permissions?</h3>
-                <p>
-                    The Twitter API only allows developers to request 'read', 'write' and 'direct message' permissions. 
-                    As this app needs to be able to read your home timeline, and block or mute users for you (which count as "writes"), 
-                    it needs both read and write permissions.
-                    <br/><br/>
-                    It does not request direct message permissions as it does not interact with your direct messages in any way.
-                </p>
-                <h3>Is the source code for this app available?</h3>
-                <p>
-                    Yes. You can find it here: <a href="https://github.com/antsstyle/nftcryptoblocker">https://github.com/antsstyle/nftcryptoblocker</a>
-                </p>
-            </div>
+                <a href="https://www.patreon.com/bePatron?u=406925" data-patreon-widget-type="become-patron-button">Become a Patron!</a>
+                <script async src="https://c6.patreon.com/becomePatronButton.bundle.js"></script>
+            </p>
+            <hr>
+            <h2>FAQs (for more information, see the Info page on the left)
+            <h3>Does this app perform any actions if I sign in but don't save any settings?</h3>
+            <p>
+                No. The app will not perform any actions on your account until you save your settings. 
+                If you do not save any settings, it will do nothing.
+            </p>
+            <h3>Why does this app need so many permissions?</h3>
+            <p>
+                The Twitter API only allows developers to request 'read', 'write' and 'direct message' permissions. 
+                As this app needs to be able to read your home timeline, and block or mute users for you (which count as "writes"), 
+                it needs both read and write permissions. 
+                <br/><br/>
+                This means that on the authorization page after pressing the Sign In with Twitter button, the app requests many write permissions 
+                that it doesn't need or use (such as posting tweets). At present there is no way around this, but the upcoming newer version of the 
+                Twitter API will enable the app to only request the exact permissions it needs. When this is available, I will implement it.
+                <br/><br/>
+                This app does not request direct message permissions as it does not interact with your direct messages in any way.
+            </p>
+            <h3>Is the source code for this app available?</h3>
+            <p>
+                Yes. You can find it here: <a href="https://github.com/antsstyle/nftcryptoblocker">https://github.com/antsstyle/nftcryptoblocker</a>
+            </p>
+
         </div>
     </body>
     <script src="Collapsibles.js"></script>

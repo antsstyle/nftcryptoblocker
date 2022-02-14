@@ -13,10 +13,13 @@ class TwitterTimelines {
     public static $logger;
 
     public static function checkHomeTimelineForAllUsers() {
+        $currentTime = date("Y-m-d H:i:s");
         $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid"
-                . " WHERE locked=?";
+                . " WHERE locked=? AND (hometimelinenextcheckdate IS NULL OR hometimelinenextcheckdate <= ?)"
+                . " AND (matchingphraseoperation != 'Noaction' OR nftprofilepictureoperation != 'Noaction' OR "
+                . "urlsoperation != 'Noaction' OR cryptousernamesoperation != 'Noaction')";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute(["N"]);
+        $success = $selectStmt->execute(["N", $currentTime]);
         if (!$success) {
             TwitterTimelines::$logger->critical("Could not get users to retrieve all home timeline entries for, returning.");
             return;
@@ -55,6 +58,7 @@ class TwitterTimelines {
                 $accessToken, $accessTokenSecret);
         $connection->setRetries(0, 0);
         $tweetCount = 1;
+        $resultCount = 0;
         $endReached = false;
         $invocationCount = 0;
         while ($tweetCount > 0 && $invocationCount < 14) {
@@ -78,7 +82,7 @@ class TwitterTimelines {
                 $endReached = true;
                 break;
             }
-
+            $resultCount += $tweetCount;
             foreach ($tweets as $tweet) {
                 if (!is_null($userRow['hometimelinesinceid']) && ($tweet->id <= $userRow['hometimelinesinceid'])) {
                     $foundAllNewResults = true;
@@ -133,37 +137,64 @@ class TwitterTimelines {
                 break;
             }
         }
-        CoreDB::$databaseConnection->beginTransaction();
-        // Update since_id in DB
-        if ($endReached && ($userRow['hometimelineendreached'] == "N")) {
-            $updateQuery = "UPDATE users SET hometimelinemaxid=?, hometimelineendreached=? WHERE twitterid=?";
-            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
-            $updateStmt->execute([$lowestMaxID, "Y", $userRow['usertwitterid']]);
-        } else if ($userRow['hometimelineendreached'] == "N") {
-            $updateQuery = "UPDATE users SET hometimelinemaxid=? WHERE twitterid=?";
-            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
-            $updateStmt->execute([$lowestMaxID, $userRow['usertwitterid']]);
-        } else {
-            $updateQuery = "UPDATE users SET hometimelinesinceid=? WHERE twitterid=?";
-            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
-            $updateStmt->execute([$highestSinceID, $userRow['usertwitterid']]);
-        }
-        $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
-                . "matchedfiltertype,matchedfiltercontent,addtocentraldb,addedfrom) VALUES (?,?,?,?,?,?,?)";
+        $transactionErrors = 0;
+        while ($transactionErrors < CoreDB::$maxTransactionRetries) {
+            try {
+                CoreDB::$databaseConnection->beginTransaction();
+                TwitterTimelines::updateLastHomeTimelineChecked($userRow, $lowestMaxID, $highestSinceID, $endReached, $resultCount);
+                $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
+                        . "matchedfiltertype,matchedfiltercontent,addtocentraldb,addedfrom) VALUES (?,?,?,?,?,?,?)";
 
-        foreach ($insertParams as $insertParamsForUser) {
-            $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
-            $insertStmt->execute($insertParamsForUser);
+                foreach ($insertParams as $insertParamsForUser) {
+                    $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
+                    $insertStmt->execute($insertParamsForUser);
+                }
+                CoreDB::$databaseConnection->commit();
+                break;
+            } catch (\Exception $e) {
+                CoreDB::$databaseConnection->rollback();
+                $transactionErrors++;
+            }
         }
-        CoreDB::$databaseConnection->commit();
+        if ($transactionErrors === CoreDB::$maxTransactionRetries) {
+            TwitterTimelines::$logger->critical("Ffailed to commit entries to process to DB: " . print_r($e, true));
+        }
+
         return $invocationCount;
     }
 
+    public static function updateLastHomeTimelineChecked($userRow, $maxID, $sinceID, $endReached, $resultCount) {
+        $lastChecked = date("Y-m-d H:i:s");
+        $resultCountRatio = max(floor($resultCount / 80), 1);
+        $hoursToNextCheck = ceil(24 / $resultCountRatio);
+        $nextCheckDate = date("Y-m-d H:i:s", strtotime("+$hoursToNextCheck hours"));
+        if ($endReached && ($userRow['hometimelineendreached'] == "N")) {
+            $updateQuery = "UPDATE users SET hometimelinemaxid=?, hometimelineendreached=?, hometimelinelastchecked=?, "
+                    . "hometimelinelastresultcount=?, hometimelinenextcheckdate=? WHERE twitterid=?";
+            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+            $updateStmt->execute([$maxID, "Y", $lastChecked, $resultCount, $nextCheckDate, $userRow['usertwitterid']]);
+        } else if ($userRow['hometimelineendreached'] == "N") {
+            $updateQuery = "UPDATE users SET hometimelinemaxid=?, hometimelinelastchecked=?, "
+                    . "hometimelinelastresultcount=?, hometimelinenextcheckdate=? WHERE twitterid=?";
+            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+            $updateStmt->execute([$maxID, $lastChecked, $resultCount, $nextCheckDate, $userRow['usertwitterid']]);
+        } else {
+            $updateQuery = "UPDATE users SET hometimelinesinceid=?, hometimelinelastchecked=?, "
+                    . "hometimelinelastresultcount=?, hometimelinenextcheckdate=? WHERE twitterid=?";
+            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+            $updateStmt->execute([$sinceID, $lastChecked, $resultCount, $nextCheckDate, $userRow['usertwitterid']]);
+        }
+    }
+
     public static function checkMentionsTimelineForAllUsers() {
+        $currentTime = date("Y-m-d H:i:s");
+        error_log("Mentions threshold: $currentTime");
         $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid"
-                . " WHERE locked=?";
+                . " WHERE locked=? AND (mentionstimelinenextcheckdate IS NULL OR mentionstimelinenextcheckdate <= ?)"
+                . " AND (matchingphraseoperation != 'Noaction' OR nftprofilepictureoperation != 'Noaction' OR "
+                . "urlsoperation != 'Noaction' OR cryptousernamesoperation != 'Noaction')";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute(["N"]);
+        $success = $selectStmt->execute(["N", $currentTime]);
         if (!$success) {
             TwitterTimelines::$logger->critical("Could not get users to retrieve all mentions for, returning.");
             return;
@@ -176,10 +207,124 @@ class TwitterTimelines {
             return;
         }
         $mentionInvocationCount = 0;
+        error_log("Mentions user count: " . $selectStmt->rowCount());
         while ($userRow = $selectStmt->fetch()) {
-            $mentionInvocationCount += TwitterTimelines::checkMentionsTimelineForUser($userRow, $phrases, $urls, $regexes);
+            //$mentionInvocationCount += TwitterTimelines::checkMentionsTimelineForUser($userRow, $phrases, $urls, $regexes);
+            $mentionInvocationCount += TwitterTimelines::checkMentionsTimelineForUserApi11($userRow, $phrases, $urls, $regexes);
         }
-        CoreDB::updateTwitterEndpointLogs("users/:id/mentions", $mentionInvocationCount);
+        //CoreDB::updateTwitterEndpointLogs("users/:id/mentions", $mentionInvocationCount);
+        error_log("Mentions invocation count: $mentionInvocationCount");
+        CoreDB::updateTwitterEndpointLogs("statuses/mentions_timeline", $mentionInvocationCount);
+    }
+
+    public static function checkMentionsTimelineForUserApi11($userRow, $phrases, $urls, $regexes) {
+        $highestSinceID = 0;
+        $accessToken = $userRow['accesstoken'];
+        $accessTokenSecret = $userRow['accesstokensecret'];
+        $insertParams = [];
+        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
+                $accessToken, $accessTokenSecret);
+        $connection->setRetries(0, 0);
+        $endpointInvocationCount = 0;
+        $queryParams['tweet_mode'] = "extended";
+        $queryParams['count'] = 200;
+        $queryParams['include_ext_has_nft_avatar'] = true;
+        if (!is_null($userRow['mentionstimelinesinceid'])) {
+            $queryParams['since_id'] = $userRow['mentionstimelinesinceid'];
+        }
+
+        try {
+            $response = $connection->get("statuses/mentions_timeline", $queryParams);
+            $endpointInvocationCount++;
+        } catch (\Exception $e) {
+            TwitterTimelines::$logger->error("TwitterOAuth failed to get a response. " . print_r($e, true));
+            return $endpointInvocationCount;
+        }
+        $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
+        if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+            TwitterTimelines::updateLastMentionTimelineChecked($userRow['usertwitterid'], $highestSinceID, 0);
+            return $endpointInvocationCount;
+        }
+        $resultCount = count($response);
+        if (count($response) === 0) {
+            TwitterTimelines::updateLastMentionTimelineChecked($userRow['usertwitterid'], $highestSinceID, $resultCount);
+            return $endpointInvocationCount;
+        }
+
+        foreach ($response as $mention) {
+            $mentionID = $mention->id;
+            if (!is_null($userRow['mentionstimelinesinceid']) && ($mentionID <= $userRow['mentionstimelinesinceid'])) {
+                break;
+            }
+
+            // check description, profile picture: add block to entries to process if match found
+            $filtersMatched = Core::checkUserFiltersMentionTimelineApi11($mention, $userRow, $phrases, $urls, $regexes);
+            if ($filtersMatched) {
+                TwitterTimelines::$logger->info("Filters matched for mentions timeline, filters array:");
+                TwitterTimelines::$logger->info(print_r($filtersMatched, true));
+                $mentionAuthorID = $mention->user->id;
+                TwitterTimelines::$logger->info("Filters matched for mentions timeline, object user ID: $mentionAuthorID");
+                if ($filtersMatched['operation'] == "Block") {
+                    $insertParams[] = [$userRow['usertwitterid'], $mentionAuthorID, "Block", $filtersMatched['filtertype'],
+                        $filtersMatched['filtercontent'], "Y", "statuses/mentions_timeline"];
+                    // Add to entries to process along with reason information
+                } else if ($filtersMatched['operation'] == "Mute") {
+                    $insertParams[] = [$userRow['usertwitterid'], $mentionAuthorID, "Mute", $filtersMatched['filtertype'],
+                        $filtersMatched['filtercontent'], "Y", "statuses/mentions_timeline"];
+                    // Add to entries to process along with reason information
+                } else {
+                    $userOp = $filtersMatched['operation'];
+                    TwitterTimelines::$logger->error("Unrecognised user automation operation, text was: $userOp");
+                }
+            }
+            $tweetID = $mention->id;
+            if ($tweetID > $highestSinceID) {
+                $highestSinceID = $tweetID;
+            }
+        }
+
+        $transactionErrors = 0;
+        while ($transactionErrors < CoreDB::$maxTransactionRetries) {
+            try {
+                CoreDB::$databaseConnection->beginTransaction();
+                TwitterTimelines::updateLastMentionTimelineChecked($userRow['usertwitterid'], $highestSinceID, $resultCount);
+                $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
+                        . "matchedfiltertype,matchedfiltercontent,addtocentraldb,addedfrom) VALUES (?,?,?,?,?,?,?)";
+
+                foreach ($insertParams as $insertParamsForUser) {
+                    $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
+                    $insertStmt->execute($insertParamsForUser);
+                }
+                CoreDB::$databaseConnection->commit();
+                break;
+            } catch (\Exception $e) {
+                CoreDB::$databaseConnection->rollback();
+                $transactionErrors++;
+            }
+        }
+        if ($transactionErrors === CoreDB::$maxTransactionRetries) {
+            TwitterTimelines::$logger->critical("Failed to commit entries to process to DB: " . print_r($e, true));
+        }
+
+        return $endpointInvocationCount;
+    }
+
+    public static function updateLastMentionTimelineChecked($userTwitterID, $sinceID, $resultCount) {
+        $lastChecked = date("Y-m-d H:i:s");
+        $resultCountRatio = max(floor($resultCount / 80), 1);
+        $hoursToNextCheck = ceil(24 / $resultCountRatio);
+        $nextCheckDate = date("Y-m-d H:i:s", strtotime("+$hoursToNextCheck hours"));
+        if ($sinceID !== 0) {
+            $updateQuery = "UPDATE users SET mentionstimelinesinceid=?, mentionstimelinelastchecked=?, "
+                    . "mentionstimelinelastresultcount=?, mentionstimelinenextcheckdate=? WHERE twitterid=?";
+            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+            $updateStmt->execute([$sinceID, $lastChecked, $resultCount, $nextCheckDate, $userTwitterID]);
+        } else {
+            $updateQuery = "UPDATE users SET mentionstimelinelastchecked=?, mentionstimelinelastresultcount=?, "
+                    . "mentionstimelinenextcheckdate=? WHERE twitterid=?";
+            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+            $updateStmt->execute([$lastChecked, $resultCount, $nextCheckDate, $userTwitterID]);
+        }
     }
 
     public static function checkMentionsTimelineForUser($userRow, $phrases, $urls, $regexes) {
@@ -288,31 +433,43 @@ class TwitterTimelines {
                 break;
             }
         }
-        CoreDB::$databaseConnection->beginTransaction();
-        if ($endReached && ($userRow['mentionstimelineendreached'] == "N")) {
-            if (!isset($queryParams['pagination_token'])) {
-                $queryParams['pagination_token'] = null;
-            }
-            $updateQuery = "UPDATE users SET mentionstimelineendreached=?, mentionstimelinepaginationtoken=? WHERE twitterid=?";
-            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
-            $updateStmt->execute(["Y", $queryParams['pagination_token'], $userRow['usertwitterid']]);
-        } else if ($userRow['mentionstimelineendreached'] == "N") {
-            $updateQuery = "UPDATE users SET mentionstimelinepaginationtoken=? WHERE twitterid=?";
-            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
-            $updateStmt->execute([$queryParams['pagination_token'], $userRow['usertwitterid']]);
-        } else if (isset($highestSinceID)) {
-            $updateQuery = "UPDATE users SET mentionstimelinesinceid=? WHERE twitterid=?";
-            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
-            $updateStmt->execute([$highestSinceID, $userRow['usertwitterid']]);
-        }
-        $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
-                . "matchedfiltertype,matchedfiltercontent,addtocentraldb,addedfrom) VALUES (?,?,?,?,?,?,?)";
+        $transactionErrors = 0;
+        while ($transactionErrors < CoreDB::$maxTransactionRetries) {
+            try {
+                CoreDB::$databaseConnection->beginTransaction();
+                if ($endReached && ($userRow['mentionstimelineendreached'] == "N")) {
+                    if (!isset($queryParams['pagination_token'])) {
+                        $queryParams['pagination_token'] = null;
+                    }
+                    $updateQuery = "UPDATE users SET mentionstimelineendreached=?, mentionstimelinepaginationtoken=? WHERE twitterid=?";
+                    $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+                    $updateStmt->execute(["Y", $queryParams['pagination_token'], $userRow['usertwitterid']]);
+                } else if ($userRow['mentionstimelineendreached'] == "N") {
+                    $updateQuery = "UPDATE users SET mentionstimelinepaginationtoken=? WHERE twitterid=?";
+                    $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+                    $updateStmt->execute([$queryParams['pagination_token'], $userRow['usertwitterid']]);
+                } else if (isset($highestSinceID)) {
+                    $updateQuery = "UPDATE users SET mentionstimelinesinceid=? WHERE twitterid=?";
+                    $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+                    $updateStmt->execute([$highestSinceID, $userRow['usertwitterid']]);
+                }
+                $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
+                        . "matchedfiltertype,matchedfiltercontent,addtocentraldb,addedfrom) VALUES (?,?,?,?,?,?,?)";
 
-        foreach ($insertParams as $insertParamsForUser) {
-            $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
-            $insertStmt->execute($insertParamsForUser);
+                foreach ($insertParams as $insertParamsForUser) {
+                    $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
+                    $insertStmt->execute($insertParamsForUser);
+                }
+                CoreDB::$databaseConnection->commit();
+                break;
+            } catch (\Exception $e) {
+                CoreDB::$databaseConnection->rollback();
+                $transactionErrors++;
+            }
         }
-        CoreDB::$databaseConnection->commit();
+        if ($transactionErrors === CoreDB::$maxTransactionRetries) {
+            TwitterTimelines::$logger->critical("Failed to commit entries to process to DB: " . print_r($e, true));
+        }
         return $endpointInvocationCount;
     }
 

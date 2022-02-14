@@ -90,7 +90,9 @@ $automationSavedSuccess = CoreDB::updateUserAutomationSettings($userTwitterID, $
             if ($successful == 0) {
                 echo "No options were specified. Go to the settings page to modify your settings.";
             } else if ($errors == 0) {
-                echo "Block list settings and automation settings saved successfully. If you want to change your settings, you can go back to the settings page.";
+                echo "Block list settings and automation settings saved successfully. If you want to change your "
+                . "settings, you can go back to the settings page.<br/><br/>You can go to the Stats page on the left to see how many accounts have been "
+                        . "blocked/muted for you, and how many are queued. ";
             } else if ($errors > 0 && $automationSavedSuccess) {
                 echo "Automation settings were saved successfully, but block list settings were not saved successfully."
                 . " $errors errors were encountered. Go back to the homepage to try"

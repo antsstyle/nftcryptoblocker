@@ -34,7 +34,7 @@ if ($userInfo === false) {
     exit();
 }
 
-$newUser = $userInfo['newuser'];
+//$newUser = $userInfo['newuser'];
 
 $blockLists = CoreDB::getBlockLists();
 $centralDBCount = CoreDB::getCentralDBCount();
@@ -67,10 +67,10 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
             </div>
             <p>
                 <?php
-                if ($newUser === "Y") {
+                /*if ($newUser === "Y") {
                     echo "Error: New users cannot currently use the app at this time.<br/><br/>";
                     exit();
-                }
+                }*/
                 if (!$blockLists) {
                     echo "Error: could not load block list names.<br/><br/>";
                     exit();
@@ -100,7 +100,7 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
                     echo "<label for=\"noaction $blockListName\"> Do nothing </label></div><br/>";
                 }
                 echo "<h2>Auto-block and auto-mute options</h2>";
-                echo "The options below will scan tweets that mention you and tweets which appear in your timeline, and block or mute"
+                echo "The options below will scan tweets which appear in your timeline and tweets that mention you, and block or mute"
                 . " the user who posted that tweet depending on which option you select.<br/><br/>";
                 echo "<b>Tweets containing crypto/NFT related phrases:</b> <a href=\"$blockablePhrasesPage\" target=\"_blank\">"
                 . "(list of phrases)</a>";
@@ -156,11 +156,13 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
                 echo "<b>Central database</b>";
                 echo "<br/><br/>"
                 . "When anyone blocks a user via one of the above auto-block or auto-mute options, this app keeps a record of that user and which filter they matched. "
-                . "If you enable this option, you can block or mute all users in that database. It will only do this for central"
+                . "If you enable this option, you can block or mute some of the highest matched users in that database. It will only do this for central"
                 . " database entries that match filters you have chosen to block or mute above."
                 . "<br/><br/>"
-                . "There are currently <b>$centralDBCount</b> crypto/NFT users in the central database. If you enable this option, the app will also action"
-                . " future database entries for you.<br/><br/>"
+                . "Note that due to processing constraints, the number of central DB entries the app will block for you is subject to change. It will "
+                . "currently block or mute all users who meet the match criteria."
+                . "</br><br/>"
+                . "There are currently <b>$centralDBCount</b> crypto/NFT users in the central database who meet the match criteria.<br/><br/>"
                 . "<div class=\"formsection\">";
                 echo "<input type=\"radio\" id=\"block centraldatabase\" name=\"centraldatabase\" value=\"block_centraldatabase\">";
                 echo "<label for=\"block centraldatabase\"> Block </label>";

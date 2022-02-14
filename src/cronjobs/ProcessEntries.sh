@@ -26,8 +26,8 @@ do
     lockFile="${tmpDir}${fileName}-p$i"
     if [[ $waitTime -gt 0 ]]
     then
-        nohup flock -e -w ${waitTime} ${lockFile} php cronjobs/ProcessEntries.php "-p$i" &
+        nice -n 19 nohup flock -e -w ${waitTime} ${lockFile} php cronjobs/ProcessEntries.php "-p$i" &
     else
-        nohup flock -en ${lockFile} php cronjobs/ProcessEntries.php "-p$i" &
+        nice -n 19 nohup flock -en ${lockFile} php cronjobs/ProcessEntries.php "-p$i" &
     fi
 done

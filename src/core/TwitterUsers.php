@@ -14,12 +14,55 @@ class TwitterUsers {
 
     public static $logger;
 
+    public static function getUserFollowings($userAuth) {
+        $userTwitterID = $userAuth['twitterid'];
+        $params['max_results'] = 1000;
+        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
+                $userAuth['accesstoken'], $userAuth['accesstokensecret']);
+        $connection->setApiVersion('2');
+        $connection->setRetries(0, 0);
+        $nextPaginationToken = 1;
+        $invocationCount = 0;
+        while (!is_null($nextPaginationToken) && $invocationCount < 10) {
+            $response = $connection->get("users/$userTwitterID/following", $params);
+            CoreDB::updateTwitterEndpointLogs("users/:id/following", 1);
+            $invocationCount++;
+            $statusCode = Core::checkResponseHeadersForErrors($connection);
+            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+                return null;
+            }
+            $followings = $response->data;
+            $meta = $response->meta;
+            $nextPaginationToken = $meta->next_token;
+            $insertQuery = "INSERT IGNORE INTO userfollowingscache (usertwitterid,followingusertwitterid) VALUES (?,?)";
+            $transactionErrors = 0;
+            while ($transactionErrors < CoreDB::$maxTransactionRetries) {
+                try {
+                    CoreDB::$databaseConnection->beginTransaction();
+                    foreach ($followings as $following) {
+                        $followingUserTwitterID = $following['id'];
+                        $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
+                        $insertStmt->execute($userTwitterID, $followingUserTwitterID);
+                    }
+                    CoreDB::$databaseConnection->commit();
+                    break;
+                } catch (\Exception $e) {
+                    CoreDB::$databaseConnection->rollback();
+                    $transactionErrors++;
+                }
+            }
+            if ($transactionErrors === CoreDB::$maxTransactionRetries) {
+                TwitterUsers::$logger->critical("Failed to commit user followings cache entries to DB: " . print_r($e, true));
+            }
+        }
+    }
+
     public static function userLookup($userList) {
         $params['ids'] = $userList;
         $params['user.fields'] = "public_metrics,username";
         $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret, null, APIKeys::bearer_token);
         $connection->setApiVersion('2');
-        $connection->setRetries(1, 1);
+        $connection->setRetries(0, 0);
         $response = $connection->get("users", $params);
         CoreDB::updateTwitterEndpointLogs("users", 1);
         $statusCode = Core::checkResponseHeadersForErrors($connection);
@@ -27,7 +70,6 @@ class TwitterUsers {
             TwitterUsers::$logger->error("Credentials error");
             return null;
         }
-        TwitterUsers::$logger->info(print_r($response, true));
         return $response;
     }
 
@@ -73,7 +115,7 @@ class TwitterUsers {
         $params['q'] = $query;
         $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
                 AdminUserAuth::access_token, AdminUserAuth::access_token_secret);
-        $connection->setRetries(1, 1);
+        $connection->setRetries(0, 0);
         $insertParams = [];
         for ($i = 0; $i < 50; $i++) {
             $params['page'] = $i;
@@ -88,8 +130,8 @@ class TwitterUsers {
             foreach ($response as $userObject) {
                 $filtersMatched = TwitterUsers::checkNFTFilters($subjectUserInfo, $userObject, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
-                    TwitterUsers::$logger->info("Filters matched for users/search! Object user ID: $userObject->id. Filter was:");
-                    TwitterUsers::$logger->info(print_r($filtersMatched, true));
+                    //TwitterUsers::$logger->info("Filters matched for users/search! Object user ID: $userObject->id. Filter was:");
+                    //TwitterUsers::$logger->info(print_r($filtersMatched, true));
 
                     $insertParams[] = [$userObject->id, $filtersMatched['filtertype'],
                         $filtersMatched['filtercontent'], "users/search"];
@@ -106,7 +148,7 @@ class TwitterUsers {
         $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
                 $userAuth['accesstoken'], $userAuth['accesstokensecret']);
         $connection->setApiVersion('2');
-        $connection->setRetries(1, 1);
+        $connection->setRetries(0, 0);
         $query = "users/" . $userTwitterID;
         $response = $connection->get($query, $params);
         CoreDB::updateTwitterEndpointLogs("users/:id", 1);
@@ -167,7 +209,7 @@ class TwitterUsers {
         $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
                 $accessToken, $accessTokenSecret);
         $connection->setApiVersion('2');
-        $connection->setRetries(1, 1);
+        $connection->setRetries(0, 0);
         $returnedPages = 0;
         $noMorePages = false;
         if ($userRow['followersendreached'] == "Y") {
@@ -199,8 +241,8 @@ class TwitterUsers {
                 // check description, profile picture: add block to entries to process if match found
                 $filtersMatched = TwitterUsers::checkNFTFilters($userRow, $objectUser, $phrases, $urls, $regexes);
                 if ($filtersMatched) {
-                    TwitterUsers::$logger->info("Filters matched for user follower! Object user ID: $objectUser->id. Filter was:");
-                    TwitterUsers::$logger->info(print_r($filtersMatched, true));
+                    //TwitterUsers::$logger->info("Filters matched for user follower! Object user ID: $objectUser->id. Filter was:");
+                    //TwitterUsers::$logger->info(print_r($filtersMatched, true));
                     if ($filtersMatched['operation'] == "Block") {
                         $insertParams[] = [$userRow['usertwitterid'], $objectUser->id, "Block", $filtersMatched['filtertype'],
                             $filtersMatched['filtercontent'], "Y", "users/:id/followers"];
@@ -267,12 +309,24 @@ class TwitterUsers {
 
         $insertQuery = "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,"
                 . "matchedfiltertype,matchedfiltercontent,addtocentraldb,addedfrom) VALUES (?,?,?,?,?,?,?)";
-        CoreDB::$databaseConnection->beginTransaction();
-        foreach ($insertParams as $insertParamsForUser) {
-            $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
-            $insertStmt->execute($insertParamsForUser);
+        $transactionErrors = 0;
+        while ($transactionErrors < CoreDB::$maxTransactionRetries) {
+            try {
+                CoreDB::$databaseConnection->beginTransaction();
+                foreach ($insertParams as $insertParamsForUser) {
+                    $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
+                    $insertStmt->execute($insertParamsForUser);
+                }
+                CoreDB::$databaseConnection->commit();
+                break;
+            } catch (\Exception $e) {
+                CoreDB::$databaseConnection->rollback();
+                $transactionErrors++;
+            }
         }
-        CoreDB::$databaseConnection->commit();
+        if ($transactionErrors === CoreDB::$maxTransactionRetries) {
+            TwitterUsers::$logger->critical("Failed to commit entries to process into database: " . print_r($e, true));
+        }
     }
 
     public static function checkNFTFilters($subjectUserInfo, $objectUser, $phrases, $urls, $regexes) {

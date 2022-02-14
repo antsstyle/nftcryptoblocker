@@ -16,4 +16,9 @@ class CachedVariables {
     
     const NUM_PROCESSENTRIES_THREADS = "nftcryptoblocker.numprocessentriesthreads";  
     
+    const CENTRALISEDBLOCKLIST_MIN_MATCHCOUNT = "nftcryptoblocker.centralisedblocklistminmatchcount";
+    const CENTRALISEDBLOCKLIST_MIN_FOLLOWERCOUNT = "nftcryptoblocker.centralisedblocklistminfollowercount";
+    
+    const MAX_TRANSACTION_RETRIES = "nftcryptoblocker.maxtransactionretries";   
+    const NEXT_LOAD_BALANCE_REPORT_DATE = "nftcryptoblocker.nextloadbalancereportdate";
 }

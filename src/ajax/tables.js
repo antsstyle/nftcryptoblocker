@@ -1,5 +1,5 @@
 function compare(a, b) {
-    if (!Number.isNaN(Date.parse(a))) {
+    if (!Number.isNaN(Date.parse(a)) && a.includes("-")) {
         return Date.parse(a) > Date.parse(b);
     } else if (!Number.isNaN(parseInt(a))) {
         return parseInt(a) > parseInt(b);

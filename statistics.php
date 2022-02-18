@@ -132,21 +132,21 @@ if (!is_null($blockListInfo)) {
             This is page <?php echo "$pageNum of $pageCount"; ?>.
             <?php
             if ($prevPage >= 1) {
-                echo "<button onclick=\"window.location.href = '" . Config::HOMEPAGE_URL . "stats?page=" . $prevPage . "';\">"
+                echo "<button onclick=\"window.location.href = '" . Config::HOMEPAGE_URL . "statistics?page=" . $prevPage . "';\">"
                 . "Previous page"
                 . "</button>";
             } else {
-                echo "<button onclick=\"window.location.href = '" . Config::HOMEPAGE_URL . "stats?page=" . $prevPage . "';\" disabled>"
+                echo "<button onclick=\"window.location.href = '" . Config::HOMEPAGE_URL . "statistics?page=" . $prevPage . "';\" disabled>"
                 . "Previous page"
                 . "</button>";
             }
             echo "&nbsp;";
             if ($nextPage <= $pageCount) {
-                echo "<button onclick=\"window.location.href = '" . Config::HOMEPAGE_URL . "stats?page=" . $nextPage . "';\">"
+                echo "<button onclick=\"window.location.href = '" . Config::HOMEPAGE_URL . "statistics?page=" . $nextPage . "';\">"
                 . "Next page"
                 . "</button>";
             } else {
-                echo "<button onclick=\"window.location.href = '" . Config::HOMEPAGE_URL . "stats?page=" . $nextPage . "';\" disabled>"
+                echo "<button onclick=\"window.location.href = '" . Config::HOMEPAGE_URL . "statistics?page=" . $nextPage . "';\" disabled>"
                 . "Next page"
                 . "</button>";
             }

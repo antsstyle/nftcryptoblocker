@@ -2,7 +2,7 @@
 
 namespace Antsstyle\NFTCryptoBlocker\Core;
 
-use Antsstyle\NFTCryptoBlocker\Core\StatusCode;
+use Antsstyle\NFTCryptoBlocker\Core\TwitterResponseStatus;
 use Antsstyle\NFTCryptoBlocker\Credentials\AdminUserAuth;
 use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
@@ -31,8 +31,8 @@ class TwitterTweets {
         while (!is_null($nextToken)) {
             $response = $connection->get($query, $params);
             CoreDB::updateTwitterEndpointLogs("tweets/search/recent", 1);
-            $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+            $twitterResponseStatus = Core::checkResponseForErrors($connection, null, "tweets/search/recent");
+            if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
             }
             $tweets = $response->data;

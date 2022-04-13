@@ -67,6 +67,7 @@ if ($muteCount !== null && $muteCount !== false) {
 <html>
     <head>
         <link rel="stylesheet" href="main.css" type="text/css">
+        <link rel="stylesheet" href=<?php echo Config::WEBSITE_STYLE_DIRECTORY . "sidebar.css"; ?> type="text/css">
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:site" content="@antsstyle" />
@@ -79,7 +80,7 @@ if ($muteCount !== null && $muteCount !== false) {
     </title>
     <body>
         <div class="main">
-            <?php Core::echoSideBar(); ?>
+            <script src=<?php echo Config::WEBSITE_STYLE_DIRECTORY . "sidebar.js"; ?>></script>
             <h1>NFT Artist & Cryptobro Blocker</h1>
             <p>
                 This app can automatically block or mute cryptobros and NFT artists for you.
@@ -107,7 +108,7 @@ if ($muteCount !== null && $muteCount !== false) {
                 To use this app or change your settings, you must first sign in with Twitter. Use the button below to proceed.
             </p>
             <br/>
-            <a href=<?php echo "$url" ?>>
+            <a href="<?php echo $url; ?>">
                 <img alt="Sign in with Twitter" src="src/images/signinwithtwitter.png"
                      width=158" height="28">
             </a>
@@ -122,27 +123,27 @@ if ($muteCount !== null && $muteCount !== false) {
             </p>
             <hr>
             <h2>FAQs (for more information, see the Info page on the left)
-            <h3>Does this app perform any actions if I sign in but don't save any settings?</h3>
-            <p>
-                No. The app will not perform any actions on your account until you save your settings. 
-                If you do not save any settings, it will do nothing.
-            </p>
-            <h3>Why does this app need so many permissions?</h3>
-            <p>
-                The Twitter API only allows developers to request 'read', 'write' and 'direct message' permissions. 
-                As this app needs to be able to read your home timeline, and block or mute users for you (which count as "writes"), 
-                it needs both read and write permissions. 
-                <br/><br/>
-                This means that on the authorization page after pressing the Sign In with Twitter button, the app requests many write permissions 
-                that it doesn't need or use (such as posting tweets). At present there is no way around this, but the upcoming newer version of the 
-                Twitter API will enable the app to only request the exact permissions it needs. When this is available, I will implement it.
-                <br/><br/>
-                This app does not request direct message permissions as it does not interact with your direct messages in any way.
-            </p>
-            <h3>Is the source code for this app available?</h3>
-            <p>
-                Yes. You can find it here: <a href="https://github.com/antsstyle/nftcryptoblocker">https://github.com/antsstyle/nftcryptoblocker</a>
-            </p>
+                <h3>Does this app perform any actions if I sign in but don't save any settings?</h3>
+                <p>
+                    No. The app will not perform any actions on your account until you save your settings. 
+                    If you do not save any settings, it will do nothing.
+                </p>
+                <h3>Why does this app need so many permissions?</h3>
+                <p>
+                    The Twitter API only allows developers to request 'read', 'write' and 'direct message' permissions. 
+                    As this app needs to be able to read your home timeline, and block or mute users for you (which count as "writes"), 
+                    it needs both read and write permissions. 
+                    <br/><br/>
+                    This means that on the authorization page after pressing the Sign In with Twitter button, the app requests many write permissions 
+                    that it doesn't need or use (such as posting tweets). At present there is no way around this, but the upcoming newer version of the 
+                    Twitter API will enable the app to only request the exact permissions it needs. When this is available, I will implement it.
+                    <br/><br/>
+                    This app does not request direct message permissions as it does not interact with your direct messages in any way.
+                </p>
+                <h3>Is the source code for this app available?</h3>
+                <p>
+                    Yes. You can find it here: <a href="https://github.com/antsstyle/nftcryptoblocker">https://github.com/antsstyle/nftcryptoblocker</a>
+                </p>
 
         </div>
     </body>

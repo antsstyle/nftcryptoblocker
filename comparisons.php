@@ -8,6 +8,7 @@ use Antsstyle\NFTCryptoBlocker\Core\Core;
     <script src="coreajax.js"></script>
     <head>
         <link rel="stylesheet" href="main.css" type="text/css">
+        <link rel="stylesheet" href=<?php echo Config::WEBSITE_STYLE_DIRECTORY . "sidebar.css"; ?> type="text/css">
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:site" content="@antsstyle" />
@@ -20,7 +21,7 @@ use Antsstyle\NFTCryptoBlocker\Core\Core;
     </title>
     <body>
         <div class="main">
-            <?php Core::echoSideBar(); ?>
+            <script src=<?php echo Config::WEBSITE_STYLE_DIRECTORY . "sidebar.js"; ?>></script>
             <h1>NFT Artist & Cryptobro Blocker</h1>
             <h2>What's the difference between this app and others?</h2>
             There are two primary differences between this app and others that exist (such as <a href="https://twitter.com/Ottomated_" target="_blank">

@@ -2,7 +2,7 @@
 
 namespace Antsstyle\NFTCryptoBlocker\Core;
 
-class StatusCode {
+class TwitterResponseStatus {
     const HTTP_SERVICE_UNAVAILABLE = 503;
     const HTTP_INTERNAL_SERVER_ERROR = 500;
     const HTTP_NOT_FOUND = 404;
@@ -32,10 +32,12 @@ class StatusCode {
     
     public $httpCode;
     public $twitterCode;
+    public $message;
     
-    public function __construct($httpCode, $twitterCode) {
+    public function __construct($httpCode, $twitterCode, $message = null) {
         $this->httpCode = $httpCode;
         $this->twitterCode = $twitterCode;
+        $this->message = $message;
     }
 }
 

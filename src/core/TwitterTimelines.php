@@ -69,9 +69,9 @@ class TwitterTimelines {
                 TwitterTimelines::$logger->error("TwitterOAuth failed to get a response: " . print_r($e, true));
                 continue;
             }
-            $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
-            if ($statusCode->httpCode !== StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode !== StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
-                if ($statusCode->httpCode === 429) {
+            $twitterResponseStatus = Core::checkResponseForErrors($connection, $userRow['twitterid'], "statuses/home_timeline");
+            if ($twitterResponseStatus->httpCode !== TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode !== TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
+                if ($twitterResponseStatus->httpCode === 429) {
                     TwitterTimelines::$logger->critical("Rate limit exceeded in home timeline! "
                             . "Invocation count upon rate limit exceeded was: $invocationCount");
                 }
@@ -240,8 +240,8 @@ class TwitterTimelines {
             TwitterTimelines::$logger->error("TwitterOAuth failed to get a response. " . print_r($e, true));
             return $endpointInvocationCount;
         }
-        $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
-        if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+        $twitterResponseStatus = Core::checkResponseForErrors($connection, $userRow['twitterid'], "statuses/mentions_timeline");
+        if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
             TwitterTimelines::updateLastMentionTimelineChecked($userRow['usertwitterid'], $highestSinceID, 0);
             return $endpointInvocationCount;
         }
@@ -358,8 +358,8 @@ class TwitterTimelines {
                 TwitterTimelines::$logger->error("TwitterOAuth failed to get a response. " . print_r($e, true));
                 continue;
             }
-            $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+            $twitterResponseStatus = Core::checkResponseForErrors($connection, $userRow['twitterid'], "users/:id/mentions");
+            if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
             }
             if (!isset($response->data)) {

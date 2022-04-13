@@ -8,12 +8,6 @@ use Antsstyle\NFTCryptoBlocker\Core\Session;
 
 Session::checkSession();
 
-if (!$_SESSION['oauth_token']) {
-    $errorURL = Config::HOMEPAGE_URL . "error";
-    header("Location: $errorURL", true, 302);
-    exit();
-}
-
 if (!$_SESSION['usertwitterid']) {
     $errorURL = Config::HOMEPAGE_URL . "error";
     header("Location: $errorURL", true, 302);
@@ -91,6 +85,7 @@ if (!is_null($blockListInfo)) {
     <script src="src/ajax/dbsearch.js"></script>
     <head>
         <link rel="stylesheet" href="main.css" type="text/css">
+        <link rel="stylesheet" href=<?php echo Config::WEBSITE_STYLE_DIRECTORY . "sidebar.css"; ?> type="text/css">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:site" content="@antsstyle" />
@@ -103,7 +98,7 @@ if (!is_null($blockListInfo)) {
     </title>
     <body onload="storeSearchResults()">
         <div class="main">
-            <?php Core::echoSideBar(); ?>
+            <script src=<?php echo Config::WEBSITE_STYLE_DIRECTORY . "sidebar.js"; ?>></script>
             <h1>NFT Artist & Cryptobro Blocker</h1>
             <h2>Statistics</h2>
             Below are statistics about how many accounts this app has blocked/muted for you so far.<br/><br/>

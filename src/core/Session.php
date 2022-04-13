@@ -30,8 +30,10 @@ class Session {
         // Set session ID to the new one, and start it back up again
         session_id($newSession);
         session_start([
-            'cookie_lifetime' => 900,
-            'use_strict_mode' => 1
+            'cookie_lifetime' => 86400,
+            'gc_maxlifetime' => 86400,
+            'use_strict_mode' => 1,
+            'cookie_secure' => "On",
         ]);
 
         // Don't want this one to expire
@@ -41,8 +43,10 @@ class Session {
 
     public static function checkSession() {
         session_start([
-            'cookie_lifetime' => 900,
-            'use_strict_mode' => 1
+            'cookie_lifetime' => 86400,
+            'gc_maxlifetime' => 86400,
+            'use_strict_mode' => 1,
+            'cookie_secure' => "On",
         ]);
         try {
             if ($_SESSION['OBSOLETE'] && ($_SESSION['EXPIRES'] < time())) {

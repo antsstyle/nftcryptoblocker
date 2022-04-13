@@ -39,6 +39,7 @@ $minMatchCount = CoreDB::getCachedVariable(CachedVariables::CENTRALISEDBLOCKLIST
     <script src="src/ajax/dbsearch.js"></script>
     <head>
         <link rel="stylesheet" href="main.css" type="text/css">
+        <link rel="stylesheet" href=<?php echo Config::WEBSITE_STYLE_DIRECTORY . "sidebar.css"; ?> type="text/css">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:site" content="@antsstyle" />
@@ -51,7 +52,7 @@ $minMatchCount = CoreDB::getCachedVariable(CachedVariables::CENTRALISEDBLOCKLIST
     </title>
     <body onload="storeSearchResults()">
         <div class="main">
-            <?php Core::echoSideBar(); ?>
+            <script src=<?php echo Config::WEBSITE_STYLE_DIRECTORY . "sidebar.js"; ?>></script>
             <h2>Central Database Entries</h2>
             <p>
                 <?php

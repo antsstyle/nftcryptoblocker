@@ -11,12 +11,6 @@ use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 
 Session::checkSession();
 
-if (!$_SESSION['oauth_token']) {
-    $errorURL = Config::HOMEPAGE_URL . "error";
-    header("Location: $errorURL", true, 302);
-    exit();
-}
-
 if (!$_SESSION['usertwitterid']) {
     $errorURL = Config::HOMEPAGE_URL . "error";
     header("Location: $errorURL", true, 302);
@@ -47,6 +41,7 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
     <script src="coreajax.js"></script>
     <head>
         <link rel="stylesheet" href="main.css" type="text/css">
+        <link rel="stylesheet" href=<?php echo Config::WEBSITE_STYLE_DIRECTORY . "sidebar.css"; ?> type="text/css">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:site" content="@antsstyle" />
@@ -59,7 +54,7 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
     </title>
     <body onload="getUserInformation('<?php echo $_SESSION['usertwitterid']; ?>')">
         <div class="main">
-            <?php Core::echoSideBar(); ?>
+            <script src=<?php echo Config::WEBSITE_STYLE_DIRECTORY . "sidebar.js"; ?>></script>
             <h1>NFT Artist & Cryptobro Blocker</h1>
             <div class="start">
                 Twitter authentication successful. Choose the settings you want below and press the 'Save Settings' button at the bottom of the page

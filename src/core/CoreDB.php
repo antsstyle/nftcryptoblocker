@@ -32,6 +32,51 @@ class CoreDB {
         return $configArray;
     }
 
+    public static function verifyUserRateLimitOK($userTwitterID, $endpoint) {
+        $now = strtotime("now");
+        $selectQuery = "SELECT resettime FROM userratelimitrecords WHERE usertwitterid=? AND endpoint=?";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute([$userTwitterID, $endpoint]);
+        if (!$success) {
+            CoreDB::$logger->emergency("Could not retrieve user rate limit records - unable to verify user rate limits!");
+            return null;
+        }
+        $row = $selectStmt->fetch();
+        if ($row === false) {
+            return true;
+        }
+        $resettime = strtotime($row['resettime']);
+        return ($now > $resettime);
+    }
+
+    public static function updateUserRateLimitInfo($userTwitterID, $endpoint, $resetTime) {
+        $selectQuery = "SELECT usertwitterid FROM userratelimitrecords WHERE usertwitterid=? AND endpoint=?";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute([$userTwitterID, $endpoint]);
+        if (!$success) {
+            CoreDB::$logger->emergency("Could not retrieve user rate limit records - unable to update rate limits!");
+            return false;
+        }
+        $row = $selectStmt->fetch();
+        if ($row !== false) {
+            $updateQuery = "UPDATE userratelimitrecords SET resettime=? WHERE usertwitterid=? AND endpoint=?";
+            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+            $success = $updateStmt->execute([$resetTime, $userTwitterID, $endpoint]);
+            if (!$success) {
+                CoreDB::$logger->emergency("Could not update user rate limit records!");
+                return false;
+            }
+        } else {
+            $updateQuery = "INSERT INTO userratelimitrecords (usertwitterid,endpoint,resettime) VALUES (?,?,?)";
+            $updateStmt = CoreDB::$databaseConnection->prepare($updateQuery);
+            $success = $updateStmt->execute([$userTwitterID, $endpoint, $resetTime]);
+            if (!$success) {
+                CoreDB::$logger->emergency("Could not update user rate limit records!");
+                return false;
+            }
+        }
+    }
+
     public static function updateObjectUserInfo() {
         $selectQuery = "SELECT DISTINCT objectusertwitterid FROM userblockrecords WHERE objectusertwitterid "
                 . "NOT IN (SELECT objectusertwitterid FROM objectuserinformation) LIMIT 1000";
@@ -509,8 +554,9 @@ class CoreDB {
         $paramsArray[] = $minMatchCount;
         if (count($muteArray) > 0) {
             $insertQuery = "SET @usertwitterid = $userTwitterID; "
-                    . "INSERT INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,addedfrom) "
-                    . "(SELECT @usertwitterid, blockableusertwitterid, 'Mute', 'centraldb' FROM centralisedblocklist WHERE "
+                    . "INSERT INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,addedfrom,matchedfiltertype,matchedfiltercontent) "
+                    . "(SELECT @usertwitterid, blockableusertwitterid, 'Mute', 'centraldb', matchedfiltertype, matchedfiltercontent "
+                    . "FROM centralisedblocklist WHERE "
                     . "blockableusertwitterid NOT IN (SELECT objectusertwitterid FROM "
                     . "userinitialblockrecords WHERE subjectusertwitterid=@usertwitterid AND operation='Mute') "
                     . "AND blockableusertwitterid NOT IN (SELECT objectusertwitterid FROM "
@@ -537,8 +583,9 @@ class CoreDB {
         $paramsArray[] = $minMatchCount;
         if (count($blockArray) > 0) {
             $insertQuery = "SET @usertwitterid = $userTwitterID; "
-                    . "INSERT IGNORE INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,addedfrom) "
-                    . "(SELECT @usertwitterid, blockableusertwitterid, 'Block', 'centraldb' FROM centralisedblocklist WHERE "
+                    . "INSERT INTO entriestoprocess (subjectusertwitterid,objectusertwitterid,operation,addedfrom,matchedfiltertype,matchedfiltercontent) "
+                    . "(SELECT @usertwitterid, blockableusertwitterid, 'Block', 'centraldb', matchedfiltertype, matchedfiltercontent "
+                    . "FROM centralisedblocklist WHERE "
                     . "blockableusertwitterid NOT IN (SELECT objectusertwitterid FROM "
                     . "userinitialblockrecords WHERE subjectusertwitterid=@usertwitterid AND operation='Block') "
                     . "AND blockableusertwitterid NOT IN (SELECT objectusertwitterid FROM "
@@ -749,6 +796,18 @@ class CoreDB {
         }
 
         return $success;
+    }
+
+    public static function getUserByUsername($userName) {
+        $selectQuery = "SELECT * FROM users WHERE username=?";
+        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
+        $success = $selectStmt->execute([$userName]);
+        if (!$success) {
+            CoreDB::$logger->error("Could not retrieve user information, returning.");
+            return null;
+        }
+        $row = $selectStmt->fetch();
+        return $row;
     }
 
     public static function getUserInfo($userTwitterID) {

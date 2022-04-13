@@ -3,7 +3,7 @@
 namespace Antsstyle\NFTCryptoBlocker\Core;
 
 use Antsstyle\NFTCryptoBlocker\Core\CachedVariables;
-use Antsstyle\NFTCryptoBlocker\Core\StatusCode;
+use Antsstyle\NFTCryptoBlocker\Core\TwitterResponseStatus;
 use Antsstyle\NFTCryptoBlocker\Credentials\AdminUserAuth;
 use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
@@ -27,8 +27,8 @@ class TwitterUsers {
             $response = $connection->get("users/$userTwitterID/following", $params);
             CoreDB::updateTwitterEndpointLogs("users/:id/following", 1);
             $invocationCount++;
-            $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+            $twitterResponseStatus = Core::checkResponseForErrors($connection, $userTwitterID, "users/:id/following");
+            if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
                 return null;
             }
             $followings = $response->data;
@@ -65,8 +65,8 @@ class TwitterUsers {
         $connection->setRetries(0, 0);
         $response = $connection->get("users", $params);
         CoreDB::updateTwitterEndpointLogs("users", 1);
-        $statusCode = Core::checkResponseHeadersForErrors($connection);
-        if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+        $twitterResponseStatus = Core::checkResponseForErrors($connection, null, "users");
+        if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
             TwitterUsers::$logger->error("Credentials error");
             return null;
         }
@@ -85,8 +85,8 @@ class TwitterUsers {
             $params['page'] = $i;
             $response = $connection->get($endpoint, $params);
             CoreDB::updateTwitterEndpointLogs($endpoint, 1);
-            $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+            $twitterResponseStatus = Core::checkResponseForErrors($connection, AdminUserAuth::user_id, $endpoint);
+            if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
             }
         }
@@ -121,8 +121,8 @@ class TwitterUsers {
             $params['page'] = $i;
             $response = $connection->get($endpoint, $params);
             CoreDB::updateTwitterEndpointLogs($endpoint, 1);
-            $statusCode = Core::checkResponseHeadersForErrors($connection);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+            $twitterResponseStatus = Core::checkResponseForErrors($connection, AdminUserAuth::user_id, $endpoint);
+            if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
                 TwitterUsers::$logger->error("Credentials error in users/search");
                 break;
             }
@@ -152,8 +152,8 @@ class TwitterUsers {
         $query = "users/" . $userTwitterID;
         $response = $connection->get($query, $params);
         CoreDB::updateTwitterEndpointLogs("users/:id", 1);
-        $statusCode = Core::checkResponseHeadersForErrors($connection);
-        if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+        $twitterResponseStatus = Core::checkResponseForErrors($connection, $userAuth['twitter_id'], "users/:id");
+        if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
             TwitterUsers::$logger->error("Credentials error in users/id");
             return null;
         }
@@ -221,8 +221,8 @@ class TwitterUsers {
             $query = "users/" . $userRow['usertwitterid'] . "/followers";
             $response = $connection->get($query, $params);
             CoreDB::updateTwitterEndpointLogs("users/:id/followers", 1);
-            $statusCode = Core::checkResponseHeadersForErrors($connection, $userRow['twitterid']);
-            if ($statusCode->httpCode != StatusCode::HTTP_QUERY_OK || $statusCode->twitterCode != StatusCode::NFTCRYPTOBLOCKER_QUERY_OK) {
+            $twitterResponseStatus = Core::checkResponseForErrors($connection, $userRow['twitterid'], "users/:id/followers");
+            if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
                 break;
             }
             $returnedPages++;

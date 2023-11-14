@@ -5,6 +5,7 @@ use Antsstyle\NFTCryptoBlocker\Core\CachedVariables;
 use Antsstyle\NFTCryptoBlocker\Core\Core;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 use Antsstyle\NFTCryptoBlocker\Core\Config;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 use Antsstyle\NFTCryptoBlocker\Core\Session;
 use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
 use Abraham\TwitterOAuth\TwitterOAuth;
@@ -16,7 +17,7 @@ try {
     $response = $connection->oauth("oauth/request_token", ["oauth_callback" => "https://antsstyle.com/nftcryptoblocker/results"]);
     $httpcode = $connection->getLastHttpCode();
     if ($httpcode != 200) {
-        error_log("Failed to get request token!");
+        LogManager::$webLogger->error("Failed to get request token!");
         // Show error page
     }
 } catch (\Exception $e) {

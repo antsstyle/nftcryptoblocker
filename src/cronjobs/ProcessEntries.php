@@ -11,15 +11,16 @@ $dir = getcwd();
 require $dir . '/vendor/autoload.php';
 
 use Antsstyle\NFTCryptoBlocker\Core\Core;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 $args = getopt("p:");
 if ($args === false) {
-    error_log("Unable to begin processentries - invalid process number argument.");
+    LogManager::$cronLogger->error("Unable to begin processentries - invalid process number argument.");
     return;
 }
 $pNumber = $args["p"];
 if (!is_numeric($pNumber)) {
-    error_log("Unable to begin processentries - invalid process number argument.");
+    LogManager::$cronLogger->error("Unable to begin processentries - invalid process number argument.");
     return;
 }
 
@@ -28,5 +29,5 @@ $pName = "ProcessEntries.php." . $pNumber;
 try {
     Core::processEntriesForAllUsers($args["p"]);
 } catch (\Exception $e) {
-    error_log("Error during process entries $pName - terminating. " . print_r($e, true));
+    LogManager::$cronLogger->error("Error during process entries $pName - terminating. " . print_r($e, true));
 }

@@ -5,6 +5,7 @@ require __DIR__ . '/vendor/autoload.php';
 use Antsstyle\NFTCryptoBlocker\Core\Config;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 use Antsstyle\NFTCryptoBlocker\Core\Session;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 Session::checkSession();
 
@@ -27,7 +28,7 @@ $userInfo = CoreDB::getUserByUsername($username);
 
 $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 if (password_verify($password, $userInfo['password'])) {
-    error_log("Password verified.");
+    LogManager::$webLogger->error("Password verified.");
     $_SESSION['adminlogin'] = true;
     $_SESSION['usertwitterid'] = -1;
    // CoreDB::resetAdminUserLoginAttempts($username);

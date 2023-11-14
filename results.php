@@ -7,6 +7,7 @@ require __DIR__ . '/vendor/autoload.php';
 use Antsstyle\NFTCryptoBlocker\Core\Session;
 use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 use Antsstyle\NFTCryptoBlocker\Core\Config;
 use Abraham\TwitterOAuth\TwitterOAuth;
 
@@ -27,7 +28,7 @@ $requestOAuthVerifier = filter_input(INPUT_GET, 'oauth_verifier', FILTER_SANITIZ
 
 if ($request_token['oauth_token'] !== $requestOAuthToken) {
     // Show error, redirect user back to homepage
-    error_log("Non-matching OAuth tokens - aborting.");
+    LogManager::$webLogger->error("Non-matching OAuth tokens - aborting.");
     exit();
 }
 
@@ -36,8 +37,8 @@ $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
 try {
     $access_token = $connection->oauth("oauth/access_token", ["oauth_verifier" => $requestOAuthVerifier]);
 } catch (\Exception $e) {
-    error_log("Could not get access token");
-    error_log(print_r($e, true));
+    LogManager::$webLogger->error("Could not get access token");
+    LogManager::$webLogger->error(print_r($e, true));
     $location = Config::HOMEPAGE_URL . "failure";
     header("Location: $location", true, 302);
     exit();

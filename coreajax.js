@@ -66,6 +66,14 @@ function getUserInformation(id) {
                         document.getElementById("noaction centraldatabase").checked = true;
                     }
 
+                    if (automationSettings.cryptospambotsoperation === "Block") {
+                        document.getElementById("block cryptospambots").checked = true;
+                    } else if (automationSettings.cryptospambotsoperation === "Mute") {
+                        document.getElementById("mute cryptospambots").checked = true;
+                    } else {
+                        document.getElementById("noaction cryptospambots").checked = true;
+                    }
+
                     if (automationSettings.whitelistfollowings === "N") {
                         document.getElementById("disable followerwhitelist").checked = true;
                     } else {

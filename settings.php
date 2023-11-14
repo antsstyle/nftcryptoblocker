@@ -62,10 +62,10 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
             </div>
             <p>
                 <?php
-                /*if ($newUser === "Y") {
-                    echo "Error: New users cannot currently use the app at this time.<br/><br/>";
-                    exit();
-                }*/
+                /* if ($newUser === "Y") {
+                  echo "Error: New users cannot currently use the app at this time.<br/><br/>";
+                  exit();
+                  } */
                 if (!$blockLists) {
                     echo "Error: could not load block list names.<br/><br/>";
                     exit();
@@ -165,6 +165,26 @@ $blockablePhrasesPage = Config::HOMEPAGE_URL . "blockablephrases";
                 echo "<label for=\"mute centraldatabase\"> Mute </label>";
                 echo "<input type=\"radio\" id=\"noaction centraldatabase\" name=\"centraldatabase\" value=\"noaction_centraldatabase\" checked=\"checked\">";
                 echo "<label for=\"noaction centraldatabase\"> Do nothing </label></div><br/><br/>";
+
+                echo "<b>Crypto spambots</b>";
+                echo "<br/><br/>"
+                . "Enabling this option will block or mute crypto bots that auto-reply to your tweets or otherwise appear in your mentions. It detects them by analysing several criteria:<ul>"
+                        . "<li>The age of the account</li>"
+                        . "<li>The content of the tweet</li>"
+                        . "<li>The user's bio, description and screen name</li>"
+                        . "<li>The user's total tweet and like count</li>"
+                        . "<li>Whether the tweet is in reply to another tweet</li>"
+                        . "</ul>"
+                . "<br/>"
+                . "WARNING: Although this has been designed to avoid accidental blocking of legitimate accounts, it is not guaranteed."
+                . "</br><br/>"
+                . "<div class=\"formsection\">";
+                echo "<input type=\"radio\" id=\"block cryptospambots\" name=\"cryptospambots\" value=\"block_cryptospambots\">";
+                echo "<label for=\"block cryptospambots\"> Block </label>";
+                echo "<input type=\"radio\" id=\"mute cryptospambots\" name=\"cryptospambots\" value=\"mute_cryptospambots\">";
+                echo "<label for=\"mute cryptospambots\"> Mute </label>";
+                echo "<input type=\"radio\" id=\"noaction cryptospambots\" name=\"cryptospambots\" value=\"noaction_cryptospambots\" checked=\"checked\">";
+                echo "<label for=\"noaction cryptospambots\"> Do nothing </label></div><br/><br/>";
 
                 echo "<b>Following whitelist</b>";
                 echo "<br/><br/>"

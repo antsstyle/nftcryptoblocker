@@ -11,9 +11,10 @@ $dir = getcwd();
 require $dir . '/vendor/autoload.php';
 
 use Antsstyle\NFTCryptoBlocker\Core\TwitterUsers;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 try {
     TwitterUsers::checkNFTFollowersForAllUsers();
 } catch (\Exception $e) {
-    error_log("Failed to check NFT followers for all users: " . print_r($e, true));
+    LogManager::$cronLogger->error("Failed to check NFT followers for all users: " . print_r($e, true));
 }

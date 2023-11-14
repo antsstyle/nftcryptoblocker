@@ -14,7 +14,8 @@ use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
 use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 try {
-    CoreDB::updateObjectUserInfo();
+    CoreDB::archiveIndividualUserBlockRecords();
 } catch (\Exception $e) {
-    LogManager::$cronLogger->error("Failed to update object user info: " . print_r($e, true));
+    LogManager::$cronLogger->error("Exception during archive block records cronjob: " . print_r($e, true));
 }
+

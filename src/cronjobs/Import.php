@@ -9,6 +9,7 @@ $dir = getcwd();
 require $dir . '/vendor/autoload.php';
 
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 /*
  * This expects a CSV with "Name", "Twitter handle" as the first two columns -
@@ -19,7 +20,7 @@ function importBannedUsers() {
         while (($data = fgetcsv($handle, 1000, ",")) !== false) {
             $columnCount = count($data);
             if ($columnCount !== 2) {
-                error_log("Invalid banned users CSV.");
+                LogManager::$cronLogger->error("Invalid banned users CSV.");
                 return;
             }
             $name = $data[0];
@@ -30,7 +31,7 @@ function importBannedUsers() {
         fclose($handle);
         CoreDB::insertBannedUsers($users);
     } else {       
-        error_log("Failed to open banned users file.");
+        LogManager::$cronLogger->error("Failed to open banned users file.");
     }
 }
 

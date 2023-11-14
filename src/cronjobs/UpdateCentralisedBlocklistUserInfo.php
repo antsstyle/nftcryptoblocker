@@ -11,9 +11,10 @@ $dir = getcwd();
 require $dir . '/vendor/autoload.php';
 
 use Antsstyle\NFTCryptoBlocker\Core\Core;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 try {
     Core::updateCentralDBEntriesUserInfo(1000);
 } catch (\Exception $e) {
-    error_log("Failed to get central DB entries user info: " . print_r($e, true));
+    LogManager::$cronLogger->error("Failed to get central DB entries user info: " . print_r($e, true));
 }

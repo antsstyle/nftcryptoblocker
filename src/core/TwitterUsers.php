@@ -143,7 +143,7 @@ class TwitterUsers {
     }
 
     // Gets a user object, given an access token.
-    public static function getUserObject($userAuth, $userTwitterID) {
+    public static function checkUserObjectValid($userAuth, $userTwitterID) {
         $params['user.fields'] = "entities,description,name,profile_image_url,url,username,id";
         $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
                 $userAuth['accesstoken'], $userAuth['accesstokensecret']);
@@ -153,11 +153,7 @@ class TwitterUsers {
         $response = $connection->get($query, $params);
         CoreDB::updateTwitterEndpointLogs("users/:id", 1);
         $twitterResponseStatus = Core::checkResponseForErrors($connection, $userAuth['twitter_id'], "users/:id");
-        if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
-            TwitterUsers::$logger->error("Credentials error in users/id");
-            return null;
-        }
-        return $response;
+        return $twitterResponseStatus;
     }
 
     public static function checkNFTFollowersForAllUsers() {

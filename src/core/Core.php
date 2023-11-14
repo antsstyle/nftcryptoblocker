@@ -5,6 +5,7 @@ namespace Antsstyle\NFTCryptoBlocker\Core;
 use Antsstyle\NFTCryptoBlocker\Core\TwitterResponseStatus;
 use Antsstyle\NFTCryptoBlocker\Credentials\APIKeys;
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\TwitterUsers;
 use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 use Abraham\TwitterOAuth\TwitterOAuth;
 
@@ -22,15 +23,15 @@ class Core {
                 $errorCode = $error->code;
                 $errorMessage = $error->message;
                 if ($errorCode == TwitterResponseStatus::TWITTER_INVALID_ACCESS_TOKEN) {
-                    Core::$logger->error("Deleting user with twitter ID: $userTwitterID, invalid access token.");
-                    CoreDB::deleteUser($userTwitterID);
+                    Core::$logger->error("Revoking user with twitter ID: $userTwitterID, invalid access token.");
+                    CoreDB::setUserRevoked("Y", $userTwitterID);
                 }
                 if ($errorCode == TwitterResponseStatus::TWITTER_USER_ACCOUNT_LOCKED) {
                     CoreDB::setUserLocked("Y", $userTwitterID);
                 }
                 if ($errorCode == TwitterResponseStatus::TWITTER_ACCOUNT_SUSPENDED) {
                     Core::$logger->error("Deleting user with twitter ID: $userTwitterID, account suspended.");
-                    CoreDB::deleteUser($userTwitterID);
+                    CoreDB::setUserRevoked("Y", $userTwitterID);
                 }
                 if ($httpCode == TwitterResponseStatus::HTTP_TOO_MANY_REQUESTS) {
                     Core::$logger->warning("Warning: rate limits exceeded, received error 429! User ID: $userTwitterID");
@@ -181,7 +182,7 @@ class Core {
     }
 
     // Checks if we need to perform block or mute operations, returns an array of exclusions.
-    public static function checkFriendshipsForUser($userRow, $blockIDs, $userOperationsMap) {
+    public static function checkFriendshipsAndExistingBlocksForUser($userRow, $blockIDs, $userOperationsMap) {
         if (!is_array($blockIDs)) {
             Core::$logger->error("Invalid input supplied to checkFriendshipsForUser - blockIDs was not an array.");
             return null;
@@ -190,11 +191,18 @@ class Core {
             Core::$logger->error("Empty block IDs list!");
             return [];
         }
-        $accessToken = $userRow['accesstoken'];
-        $accessTokenSecret = $userRow['accesstokensecret'];
-        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
-                $accessToken, $accessTokenSecret);
-        $connection->setRetries(0, 0);
+        $resetTime = CoreDB::getUserRateLimitRecords($userRow['twitterid'], "friendships/lookup");
+        if (is_null($resetTime)) {
+            Core::$logger->info("Couldn't ascertain reset time, returning.");
+            return;
+        }
+        if ($resetTime) {
+            $now = date("Y-m-d H:i:s");
+            if (strtotime($resetTime) > strtotime($now)) {
+                Core::$logger->info("User has 0 rate limit remaining on friendships/lookup calls, not retrieving info.");
+                return false;
+            }
+        }
         $totalCount = count($blockIDs);
         $paramStrings = [];
         for ($i = 0; $i < $totalCount; $i += 100) {
@@ -209,28 +217,34 @@ class Core {
             }
         }
         $returnArray = [];
+        $accessToken = $userRow['accesstoken'];
+        $accessTokenSecret = $userRow['accesstokensecret'];
+        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
+                $accessToken, $accessTokenSecret);
+        $connection->setRetries(0, 0);
         foreach ($paramStrings as $paramString) {
             $friendships = $connection->get("friendships/lookup", ['user_id' => $paramString]);
             CoreDB::updateTwitterEndpointLogs("friendships/lookup", 1);
             $twitterResponseStatus = Core::checkResponseForErrors($connection, $userRow['twitterid'], "friendships/lookup");
-            if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
+            if ($twitterResponseStatus->httpCode !== TwitterResponseStatus::HTTP_QUERY_OK || ($twitterResponseStatus->twitterCode !== TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK && $twitterResponseStatus->twitterCode !== TwitterResponseStatus::NFTCRYPTOBLOCKER_RATE_LIMIT_ZERO)) {
+                Core::$logger->error("Failed to get friendships for user! HTTP code: " . $twitterResponseStatus->httpCode . " Twitter code: " . $twitterResponseStatus->twitterCode);
                 Core::$logger->error("Failed to get friendships for user!" . print_r($friendships, true));
-                Core::$logger->error("Param string: $paramString");
-                Core::$logger->error("Block IDs list: " . print_r($blockIDs, true));
+                //Core::$logger->error("Param string: $paramString");
+                //Core::$logger->error("Block IDs list: " . print_r($blockIDs, true));
                 Core::$logger->error("User row: " . print_r($userRow, true));
                 return null;
             }
             foreach ($friendships as $friendship) {
-                $connections = $friendship->connections;
-                foreach ($connections as $connection) {
-                    if (($connection == "following" || $connection == "following_requested") && $userRow['whitelistfollowings'] == "Y") {
-                        $returnArray[$friendship->id] = $connection;
+                $userConnections = $friendship->connections;
+                foreach ($userConnections as $userConnection) {
+                    if (($userConnection === "following" || $userConnection === "following_requested") && $userRow['whitelistfollowings'] === "Y") {
+                        $returnArray[$friendship->id] = $userConnection;
                     } else if (array_key_exists($friendship->id, $userOperationsMap) &&
-                            $userOperationsMap[$friendship->id] == "Block" && $connection == "blocking") {
-                        $returnArray[$friendship->id] = $connection;
+                            $userOperationsMap[$friendship->id] === "Block" && $userConnection === "blocking") {
+                        $returnArray[$friendship->id] = $userConnection;
                     } else if (array_key_exists($friendship->id, $userOperationsMap) &&
-                            $userOperationsMap[$friendship->id] == "Mute" && $connection == "muting") {
-                        $returnArray[$friendship->id] = $connection;
+                            $userOperationsMap[$friendship->id] === "Mute" && $userConnection === "muting") {
+                        $returnArray[$friendship->id] = $userConnection;
                     }
                 }
             }
@@ -328,63 +342,6 @@ class Core {
             }
         } else {
             Core::$logger->error("Could not retrieve user list from API, cannot update central DB entries user info.");
-        }
-    }
-
-    public static function getUserBlockOrMuteList($userTwitterID, $operation) {
-        if ($operation !== "Block" && $operation !== "Mute") {
-            Core::$logger->error("Invalid operation supplied to getUserBlockOrMuteList, not retrieving.");
-            return;
-        }
-        $selectQuery = "SELECT * FROM users WHERE twitterid=?";
-        $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute([$userTwitterID]);
-        if (!$success) {
-            Core::$logger->critical("Could not get user to retrieve block or mute list for, returning.");
-            return;
-        }
-        $userRow = $selectStmt->fetch();
-        if (!$userRow) {
-            Core::$logger->error("No user found for user twitter id $userTwitterID, cannot retrieve initial block or mute list.");
-            return;
-        }
-        $connection = new TwitterOAuth(APIKeys::consumer_key, APIKeys::consumer_secret,
-                $userRow['accesstoken'], $userRow['accesstokensecret']);
-        $connection->setRetries(0, 0);
-        $params = [];
-        if ($operation == "Block") {
-            $blockList = $connection->get("blocks/ids", $params);
-            CoreDB::updateTwitterEndpointLogs("blocks/ids", 1);
-            $twitterResponseStatus = Core::checkResponseForErrors($connection, $userTwitterID, "blocks/ids");
-        } else {
-            $blockList = $connection->get("mutes/users/ids", $params);
-            CoreDB::updateTwitterEndpointLogs("mutes/users/ids", 1);
-            $twitterResponseStatus = Core::checkResponseForErrors($connection, $userTwitterID, "mutes/users/ids");
-        }
-
-        if ($twitterResponseStatus->httpCode != TwitterResponseStatus::HTTP_QUERY_OK || $twitterResponseStatus->twitterCode != TwitterResponseStatus::NFTCRYPTOBLOCKER_QUERY_OK) {
-            return;
-        }
-        $insertQuery = "INSERT IGNORE INTO userinitialblockrecords (subjectusertwitterid,objectusertwitterid,operation)"
-                . " VALUES (?,?,?)";
-        $usersInList = $blockList->ids;
-        $transactionErrors = 0;
-        while ($transactionErrors < CoreDB::$maxTransactionRetries) {
-            try {
-                CoreDB::$databaseConnection->beginTransaction();
-                foreach ($usersInList as $listUserID) {
-                    $insertStmt = CoreDB::$databaseConnection->prepare($insertQuery);
-                    $insertStmt->execute([$userTwitterID, $listUserID, $operation]);
-                }
-                CoreDB::$databaseConnection->commit();
-                break;
-            } catch (\Exception $e) {
-                CoreDB::$databaseConnection->rollback();
-                $transactionErrors++;
-            }
-        }
-        if ($transactionErrors === CoreDB::$maxTransactionRetries) {
-            Core::$logger->critical("Failed to commit transaction to insert user initial block records: " . print_r($e, true));
         }
     }
 
@@ -638,6 +595,25 @@ class Core {
                 }
             }
         }
+        if ($userInfo['cryptospambotsoperation'] == "Block" || $userInfo['cryptospambotsoperation'] == "Mute") {
+            $userNameEndsWith2Nums = is_numeric(substr(strtolower($mention->user->screen_name), -2));
+            $createdLessThanYearAgo = strtotime($mention->user->created_at);
+            $createdLessThanYearAgo = $createdLessThanYearAgo > strtotime("-1 year");
+            $followersCountLowerThan20 = $mention->user->followers_count < 20;
+            $friendsCountLowerThan20 = $mention->user->friends_count < 20;
+            $statusesLessThan100 = $mention->user->statuses_count < 100;
+            $favouritesLessThan100 = $mention->user->favourites_count < 100;
+            $isReplyToExistingTweet = !is_null($mention->in_reply_to_status_id_str);
+            $descriptionLessThan10 = is_null($mention->user->description) || (!is_null($mention->user->description) && strlen($mention->user->description) < 10);
+            $includesLink = is_array($mention->entities->urls) && count($mention->entities->urls) > 0;
+            /*if ($userInfo['usertwitterid'] == 3040755651) {
+                self::$logger->error("P1: $userNameEndsWith2Nums P2: $createdLessThanYearAgo P3: $followersCountLowerThan20 P4: $friendsCountLowerThan20 P5: $statusesLessThan100 P6: $favouritesLessThan100 P7: $isReplyToExistingTweet P8: $descriptionLessThan10 P9: $includesLink Mention ID: " . $mention->id_str);
+            }*/
+            if ($userNameEndsWith2Nums && $createdLessThanYearAgo && $followersCountLowerThan20 && $friendsCountLowerThan20 && $statusesLessThan100 && $favouritesLessThan100 && $isReplyToExistingTweet && $descriptionLessThan10 && $includesLink) {
+                return array("operation" => $userInfo['cryptospambotsoperation'], "filtertype" => "cryptospambots",
+                    "filtercontent" => "conditionsmet");
+            }
+        }
         return false;
     }
 
@@ -732,27 +708,34 @@ class Core {
 
     public static function processEntriesForAllUsers($pnum) {
         $selectQuery = "SELECT DISTINCT subjectusertwitterid FROM entriestoprocess WHERE pnum=? "
-                . "AND subjectusertwitterid NOT IN (SELECT twitterid FROM users WHERE locked=?) ORDER BY RAND() LIMIT 10000";
+                . "AND subjectusertwitterid NOT IN (SELECT twitterid FROM users WHERE locked=? OR revoked=?) ORDER BY RAND() LIMIT 10000";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute([$pnum, "Y"]);
+        $success = $selectStmt->execute([$pnum, "Y", "Y"]);
         if (!$success) {
             Core::$logger->critical("Could not get list of users to process entries for, terminating.");
             return;
         }
         $rowCount = $selectStmt->rowCount();
         Core::$logger->info("Processing entries for users, process number $pnum. Row count: $rowCount");
+        $i = 0;
         while ($row = $selectStmt->fetch()) {
+            $i++;
+            if ($i % 10 === 0) {
+                Core::$logger->debug("Processing entry $i of $rowCount for process number $pnum");
+            }
             $invocationMap = Core::processEntriesForUser($row['subjectusertwitterid'], $pnum);
-            foreach ($invocationMap as $endpoint => $count) {
-                if ($count > 0) {
-                    CoreDB::updateTwitterEndpointLogs($endpoint, $count);
+            if (!is_null($invocationMap) && is_array($invocationMap) && count($invocationMap) > 0) {
+                foreach ($invocationMap as $endpoint => $count) {
+                    if ($count > 0) {
+                        CoreDB::updateTwitterEndpointLogs($endpoint, $count);
+                    }
                 }
             }
         }
     }
 
     public static function processEntriesForUser($userTwitterID, $pnum) {
-        $selectQuery = "SELECT * FROM entriestoprocess WHERE subjectusertwitterid=? AND pnum=? LIMIT 45";
+        $selectQuery = "SELECT * FROM entriestoprocess WHERE subjectusertwitterid=? AND pnum=? LIMIT 200";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
         $success = $selectStmt->execute([$userTwitterID, $pnum]);
         if (!$success) {
@@ -777,15 +760,20 @@ class Core {
         $operationRows = $selectStmt->fetchAll();
         $friendshipIDsToCheck = [];
         $userOperationsMap = [];
+        $highestActionedCentralDBID = null;
         foreach ($operationRows as $operationRow) {
             $friendshipIDsToCheck[] = $operationRow['objectusertwitterid'];
             $userOperationsMap[$operationRow['objectusertwitterid']] = $operationRow['operation'];
         }
-        $exclusionList = Core::checkFriendshipsForUser($userRow, $friendshipIDsToCheck, $userOperationsMap);
+        $exclusionList = Core::checkFriendshipsAndExistingBlocksForUser($userRow, $friendshipIDsToCheck, $userOperationsMap);
         if (is_null($exclusionList)) {
             Core::$logger->error("Unable to process entries for user ID $userTwitterID - could not retrieve exclusion list.");
             return;
         }
+        if (!is_array($exclusionList)) {
+            return;
+        }
+        $rateLimitMap = ['Block' => false, 'Unblock' => false, 'Mute' => false, 'Unmute' => false];
         $endpointMap = ['Block' => 'users/:id/blocking', 'Unblock' => 'users/:source_user_id/blocking/:target_user_id',
             'Mute' => 'users/:id/muting', 'Unmute' => 'users/:source_user_id/muting/:target_user_id'];
         $invocationMap = ['users/:id/blocking' => 0, 'users/:source_user_id/blocking/:target_user_id' => 0, 'users/:id/muting' => 0,
@@ -794,11 +782,24 @@ class Core {
                 $accessToken, $accessTokenSecret);
         $connection->setApiVersion('2');
         $connection->setRetries(0, 0);
+        $totalInvocationCount = 0;
+        $iterationCount = 0;
+        $excludedCount = 0;
+        $rateLimitCount = 0;
         foreach ($operationRows as $row) {
+            $iterationCount++;
             $operation = $row['operation'];
             if (array_key_exists($row['objectusertwitterid'], $exclusionList)) {
                 // Whitelisted or operation already completed; remove the entry to process and perform no operation
+                $excludedCount++;
                 $deleteParams[] = $row['id'];
+                if ($row['addedfrom'] === "centraldb") {
+                    if (is_null($highestActionedCentralDBID)) {
+                        $highestActionedCentralDBID = $row['centraldbid'];
+                    } else {
+                        $highestActionedCentralDBID = max($highestActionedCentralDBID, $row['centraldbid']);
+                    }
+                }
                 continue;
             } else {
                 $endpoint = $endpointMap[$operation];
@@ -806,8 +807,16 @@ class Core {
                     Core::$logger->error("Unknown operation value - cannot perform entry to be processed.");
                     continue;
                 }
-                if (CoreDB::verifyUserRateLimitOK($userTwitterID, $endpoint) !== true) {
-                    break;
+                if ($rateLimitMap[$operation] === true) {
+                    $rateLimitCount++;
+                    continue;
+                }
+                $rateLimitOK = CoreDB::verifyUserRateLimitOK($userTwitterID, $endpoint);
+                if ($rateLimitOK !== true) {
+                    $rateLimitCount++;
+                    Core::$logger->info("Rate limit reached, not continuing.");
+                    $rateLimitMap[$operation] = true;
+                    continue;
                 }
                 try {
                     if ($endpoint === "users/:id/blocking" || $endpoint === "users/:id/muting") {
@@ -819,7 +828,7 @@ class Core {
                         $queryEndpoint = str_replace(":target_user_id", $row['objectusertwitterid'], $queryEndpoint);
                         $response = $connection->delete($queryEndpoint);
                     } else {
-                        Core::$logger->emergency("Invalid endpoint - cannot process entries for user!");
+                        Core::$logger->critical("Invalid endpoint - cannot process entries for user!");
                         break;
                     }
                 } catch (\Exception $e) {
@@ -827,6 +836,7 @@ class Core {
                     continue;
                 }
                 $invocationMap[$endpointMap[$operation]] = $invocationMap[$endpointMap[$operation]] + 1;
+                $totalInvocationCount++;
                 $twitterResponseStatus = Core::checkResponseForErrors($connection, $userTwitterID, $endpoint);
                 $message = $twitterResponseStatus->message;
                 if ($twitterResponseStatus->httpCode !== TwitterResponseStatus::HTTP_QUERY_OK || !is_null($message)) {
@@ -843,8 +853,15 @@ class Core {
                         Core::$logger->info("User with ID $objectUserTwitterID is already unmuted, deleting entry.");
                         $deleteParams[] = $row['id'];
                     } else if ($twitterResponseStatus->httpCode === TwitterResponseStatus::HTTP_TOO_MANY_REQUESTS) {
-                        Core::$logger->info("User $userTwitterID over rate limit - skipping.");
+                        Core::$logger->info("User $userTwitterID over rate limit - skipping further operations.");
                         break;
+                    } else if ($twitterResponseStatus->httpCode === TwitterResponseStatus::HTTP_FORBIDDEN) {
+                        $resp = TwitterUsers::checkUserObjectValid(["accesstoken" => $accessToken, "accesstokensecret" => $accessTokenSecret], $userTwitterID);
+                        if ($resp->httpCode === TwitterResponseStatus::HTTP_FORBIDDEN || $resp->httpCode === TwitterResponseStatus::HTTP_BAD_CREDENTIALS || $resp->httpCode === TwitterResponseStatus::HTTP_NOT_FOUND) {
+                            Core::$logger->error("Locking user ID $userTwitterID - cannot identify user auth.");
+                            CoreDB::setUserLocked("Y", $userTwitterID);
+                            break;
+                        }
                     } else {
                         Core::$logger->error("Unable to perform operation $operation on user ID $objectUserTwitterID on behalf of user ID $userTwitterID");
                         Core::$logger->error("Twitter response status: " . print_r($twitterResponseStatus, true));
@@ -859,11 +876,23 @@ class Core {
                             $row['addedfrom'], $row['matchedfiltertype'], $row['matchedfiltercontent'], $row['addedfrom']];
                     }
                     $recordParams[] = $row;
+                    if ($row['addedfrom'] === "centraldb") {
+                        if (is_null($highestActionedCentralDBID)) {
+                            $highestActionedCentralDBID = $row['centraldbid'];
+                        } else {
+                            $highestActionedCentralDBID = max($highestActionedCentralDBID, $row['centraldbid']);
+                        }
+                    }
                 }
             }
         }
-        CoreDB::deleteProcessedEntries($deleteParams);
+        /* Core::$logger->error("It count: $iterationCount. Op count: " . count($operationRows) . " Del count: " . count($deleteParams)
+          . " Rlimit count: $rateLimitCount Excl count: $excludedCount"); */
+        CoreDB::deleteProcessedEntries($deleteParams, $pnum);
         CoreDB::insertCentralBlockListEntries($centralBlockListInsertParams);
+        if (!is_null($highestActionedCentralDBID)) {
+            CoreDB::updateUserHighestActionedCentralDBID($userTwitterID, $highestActionedCentralDBID, $centralBlockListInsertParams);
+        }
         CoreDB::markCentralBlockListEntriesForDeletion($centralBlockListMarkForDeletionParams);
         CoreDB::updateUserBlockRecords($recordParams);
         return $invocationMap;

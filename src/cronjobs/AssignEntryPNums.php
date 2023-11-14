@@ -11,9 +11,10 @@ $dir = getcwd();
 require $dir . '/vendor/autoload.php';
 
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 try {
-    CoreDB::assignEntryPNums();
+    CoreDB::assignEntryPNumsByUser();
 } catch (\Exception $e) {
-    error_log("Failed to assign entry pnums : " . print_r($e, true));
+    LogManager::$cronLogger->error("Failed to assign entry pnums : " . print_r($e, true));
 }

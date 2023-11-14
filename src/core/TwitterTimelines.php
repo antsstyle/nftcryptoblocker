@@ -15,11 +15,11 @@ class TwitterTimelines {
     public static function checkHomeTimelineForAllUsers() {
         $currentTime = date("Y-m-d H:i:s");
         $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid"
-                . " WHERE locked=? AND (hometimelinenextcheckdate IS NULL OR hometimelinenextcheckdate <= ?)"
+                . " WHERE locked=? AND revoked=? AND (hometimelinenextcheckdate IS NULL OR hometimelinenextcheckdate <= ?)"
                 . " AND (matchingphraseoperation != 'Noaction' OR nftprofilepictureoperation != 'Noaction' OR "
                 . "urlsoperation != 'Noaction' OR cryptousernamesoperation != 'Noaction')";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute(["N", $currentTime]);
+        $success = $selectStmt->execute(["N", "N", $currentTime]);
         if (!$success) {
             TwitterTimelines::$logger->critical("Could not get users to retrieve all home timeline entries for, returning.");
             return;
@@ -188,13 +188,12 @@ class TwitterTimelines {
 
     public static function checkMentionsTimelineForAllUsers() {
         $currentTime = date("Y-m-d H:i:s");
-        error_log("Mentions threshold: $currentTime");
         $selectQuery = "SELECT * FROM users INNER JOIN userautomationsettings ON users.twitterid=userautomationsettings.usertwitterid"
-                . " WHERE locked=? AND (mentionstimelinenextcheckdate IS NULL OR mentionstimelinenextcheckdate <= ?)"
+                . " WHERE locked=? AND revoked=? AND (mentionstimelinenextcheckdate IS NULL OR mentionstimelinenextcheckdate <= ?)"
                 . " AND (matchingphraseoperation != 'Noaction' OR nftprofilepictureoperation != 'Noaction' OR "
-                . "urlsoperation != 'Noaction' OR cryptousernamesoperation != 'Noaction')";
+                . "urlsoperation != 'Noaction' OR cryptousernamesoperation != 'Noaction' OR cryptospambotsoperation != 'Noaction')";
         $selectStmt = CoreDB::$databaseConnection->prepare($selectQuery);
-        $success = $selectStmt->execute(["N", $currentTime]);
+        $success = $selectStmt->execute(["N", "N", $currentTime]);
         if (!$success) {
             TwitterTimelines::$logger->critical("Could not get users to retrieve all mentions for, returning.");
             return;
@@ -207,13 +206,11 @@ class TwitterTimelines {
             return;
         }
         $mentionInvocationCount = 0;
-        error_log("Mentions user count: " . $selectStmt->rowCount());
         while ($userRow = $selectStmt->fetch()) {
             //$mentionInvocationCount += TwitterTimelines::checkMentionsTimelineForUser($userRow, $phrases, $urls, $regexes);
             $mentionInvocationCount += TwitterTimelines::checkMentionsTimelineForUserApi11($userRow, $phrases, $urls, $regexes);
         }
         //CoreDB::updateTwitterEndpointLogs("users/:id/mentions", $mentionInvocationCount);
-        error_log("Mentions invocation count: $mentionInvocationCount");
         CoreDB::updateTwitterEndpointLogs("statuses/mentions_timeline", $mentionInvocationCount);
     }
 

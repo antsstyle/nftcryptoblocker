@@ -63,11 +63,12 @@ $nftProfilePicturesSettings = filter_input(INPUT_POST, "nftprofilepictures", FIL
 $cryptoUserNamesSettings = filter_input(INPUT_POST, "cryptousernames", FILTER_SANITIZE_STRING);
 $NFTFollowersSettings = filter_input(INPUT_POST, "nftfollowers", FILTER_SANITIZE_STRING);
 $centralDatabaseSettings = filter_input(INPUT_POST, "centraldatabase", FILTER_SANITIZE_STRING);
+$cryptoSpambotsSettings = filter_input(INPUT_POST, "cryptospambots", FILTER_SANITIZE_STRING);
 $followerWhitelistSettings = filter_input(INPUT_POST, "followerwhitelist", FILTER_SANITIZE_STRING);
 
 $automationSavedSuccess = CoreDB::updateUserAutomationSettings($userTwitterID, $phraseSettings, $urlSettings,
                 $nftProfilePicturesSettings, $cryptoUserNamesSettings, $NFTFollowersSettings,
-                $centralDatabaseSettings, $followerWhitelistSettings);
+                $centralDatabaseSettings, $cryptoSpambotsSettings, $followerWhitelistSettings);
 ?>
 
 <html>

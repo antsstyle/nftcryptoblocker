@@ -11,13 +11,14 @@ $dir = getcwd();
 require $dir . '/vendor/autoload.php';
 
 use Antsstyle\NFTCryptoBlocker\Core\TwitterTimelines;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 $start = microtime(true);
 
 try {
     TwitterTimelines::checkMentionsTimelineForAllUsers();
 } catch (\Exception $e) {
-    error_log("Exception during mention timelines cronjob: " . print_r($e, true));
+    LogManager::$cronLogger->error("Exception during mention timelines cronjob: " . print_r($e, true));
 }
 
 $executionTime = microtime(true) - $start;
@@ -25,9 +26,9 @@ $executionTimeHours = floor($executionTime / 3600);
 $executionTimeMinutes = floor(($executionTime - $executionTimeHours * 3600) / 60);
 $executionTimeSeconds = $executionTime - ($executionTimeMinutes * 60) - ($executionTimeHours * 3600);
 if ($executionTimeHours > 0) {
-    error_log("Mentions timeline cronjob took $executionTimeHours hours, $executionTimeMinutes minutes and $executionTimeSeconds seconds.");
+    LogManager::$cronLogger->info("Mentions timeline cronjob took $executionTimeHours hours, $executionTimeMinutes minutes and $executionTimeSeconds seconds.");
 } else if ($executionTimeMinutes > 0) {
-    error_log("Mentions timeline cronjob took $executionTimeMinutes minutes and $executionTimeSeconds seconds.");
+    LogManager::$cronLogger->info("Mentions timeline cronjob took $executionTimeMinutes minutes and $executionTimeSeconds seconds.");
 } else {
-    error_log("Mentions timeline cronjob took $executionTimeSeconds seconds.");
+    LogManager::$cronLogger->info("Mentions timeline cronjob took $executionTimeSeconds seconds.");
 }

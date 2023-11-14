@@ -11,9 +11,10 @@ $dir = getcwd();
 require $dir . '/vendor/autoload.php';
 
 use Antsstyle\NFTCryptoBlocker\Core\CoreDB;
+use Antsstyle\NFTCryptoBlocker\Core\LogManager;
 
 try {
     CoreDB::calculateCachedVariables();
 } catch (\Exception $e) {
-    error_log("Exception during calculate cached variables cronjob: " . print_r($e, true));
+    LogManager::$cronLogger->error("Exception during calculate cached variables cronjob: " . print_r($e, true));
 }
